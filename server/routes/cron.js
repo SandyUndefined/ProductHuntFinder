@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const rssService = require('../services/rssService');
 const dbService = require('../services/dbService');
+const linkedinEnrichmentService = require('../services/linkedinEnrichmentService');
 
 /**
  * POST /cron/fetch
@@ -15,36 +16,68 @@ router.post('/fetch', async (req, res) => {
 
   try {
     // Fetch all RSS feeds
-    const results = await rssService.fetchAllCategories();
+    const rssResults = await rssService.fetchAllCategories();
     
+    console.log('=== RSS Fetch Completed ===');
+    console.log(`Total processed: ${rssResults.totalProcessed}`);
+    console.log(`New products: ${rssResults.totalNew}`);
+    console.log(`Duplicates: ${rssResults.totalDuplicates}`);
+    console.log(`Errors: ${rssResults.errors.length}`);
+
+    // Run LinkedIn enrichment on products that need it
+    let enrichmentResults = null;
+    try {
+      console.log('=== Starting LinkedIn Enrichment ===');
+      enrichmentResults = await linkedinEnrichmentService.enrichProducts();
+    } catch (enrichmentError) {
+      console.error('LinkedIn enrichment failed, but continuing:', enrichmentError.message);
+      enrichmentResults = {
+        totalProcessed: 0,
+        successfulEnrichments: 0,
+        failedEnrichments: 0,
+        cacheHits: 0,
+        errors: [{ error: enrichmentError.message }]
+      };
+    }
+
     const endTime = Date.now();
     const duration = endTime - startTime;
 
-    // Log results
-    console.log('=== RSS Fetch Cron Job Completed ===');
-    console.log(`Duration: ${duration}ms`);
-    console.log(`Total processed: ${results.totalProcessed}`);
-    console.log(`New products: ${results.totalNew}`);
-    console.log(`Duplicates: ${results.totalDuplicates}`);
-    console.log(`Errors: ${results.errors.length}`);
+    // Log combined results
+    console.log('=== Combined Cron Job Completed ===');
+    console.log(`Total Duration: ${duration}ms`);
+    console.log(`RSS - Processed: ${rssResults.totalProcessed}, New: ${rssResults.totalNew}`);
+    console.log(`LinkedIn - Processed: ${enrichmentResults.totalProcessed}, Successful: ${enrichmentResults.successfulEnrichments}`);
 
-    // Get database stats
+    // Get updated database stats
     const stats = await dbService.getStats();
 
-    // Return success response
+    // Return combined success response
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
       duration: `${duration}ms`,
       results: {
-        categories: results.categories,
-        summary: {
-          totalProcessed: results.totalProcessed,
-          totalNew: results.totalNew,
-          totalDuplicates: results.totalDuplicates,
-          errorCount: results.errors.length
+        rss: {
+          categories: rssResults.categories,
+          summary: {
+            totalProcessed: rssResults.totalProcessed,
+            totalNew: rssResults.totalNew,
+            totalDuplicates: rssResults.totalDuplicates,
+            errorCount: rssResults.errors.length
+          },
+          errors: rssResults.errors
         },
-        errors: results.errors
+        linkedinEnrichment: {
+          summary: {
+            totalProcessed: enrichmentResults.totalProcessed,
+            successfulEnrichments: enrichmentResults.successfulEnrichments,
+            failedEnrichments: enrichmentResults.failedEnrichments,
+            cacheHits: enrichmentResults.cacheHits,
+            errorCount: enrichmentResults.errors.length
+          },
+          errors: enrichmentResults.errors
+        }
       },
       database: stats
     });
@@ -198,6 +231,132 @@ router.post('/test/:category', async (req, res) => {
       success: false,
       timestamp: new Date().toISOString(),
       category,
+      error: {
+        message: error.message,
+        type: error.name || 'UnknownError'
+      }
+    });
+  }
+});
+
+/**
+ * POST /cron/enrich
+ * Trigger LinkedIn enrichment for pending products
+ * Useful for manual or standalone enrichment
+ */
+router.post('/enrich', async (req, res) => {
+  const startTime = Date.now();
+  console.log('=== LinkedIn Enrichment Job Started ===');
+  console.log('Timestamp:', new Date().toISOString());
+
+  try {
+    const results = await linkedinEnrichmentService.enrichProducts();
+    
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    console.log('=== LinkedIn Enrichment Job Completed ===');
+    console.log(`Duration: ${duration}ms`);
+    console.log(`Total processed: ${results.totalProcessed}`);
+    console.log(`Successful: ${results.successfulEnrichments}`);
+    console.log(`Failed: ${results.failedEnrichments}`);
+
+    // Get updated database stats
+    const stats = await dbService.getStats();
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      duration: `${duration}ms`,
+      results: {
+        summary: {
+          totalProcessed: results.totalProcessed,
+          successfulEnrichments: results.successfulEnrichments,
+          failedEnrichments: results.failedEnrichments,
+          cacheHits: results.cacheHits,
+          errorCount: results.errors.length
+        },
+        errors: results.errors
+      },
+      database: stats
+    });
+
+  } catch (error) {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    console.error('=== LinkedIn Enrichment Job Failed ===');
+    console.error('Error:', error.message);
+    console.error('Duration:', `${duration}ms`);
+
+    res.status(500).json({
+      success: false,
+      timestamp: new Date().toISOString(),
+      duration: `${duration}ms`,
+      error: {
+        message: error.message,
+        type: error.name || 'UnknownError'
+      }
+    });
+  }
+});
+
+/**
+ * GET /cron/enrich/status
+ * Get LinkedIn enrichment cache status and statistics
+ */
+router.get('/enrich/status', async (req, res) => {
+  try {
+    const cacheStats = linkedinEnrichmentService.getCacheStats();
+    const dbStats = await dbService.getStats();
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      enrichment: {
+        cache: cacheStats,
+        database: {
+          totalProducts: dbStats.totalProducts,
+          enrichedProducts: dbStats.enrichedProducts,
+          needingEnrichment: dbStats.needingEnrichment
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Enrichment status check failed:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      timestamp: new Date().toISOString(),
+      error: {
+        message: error.message,
+        type: error.name || 'UnknownError'
+      }
+    });
+  }
+});
+
+/**
+ * POST /cron/enrich/clear-cache
+ * Clear the LinkedIn search cache
+ */
+router.post('/enrich/clear-cache', (req, res) => {
+  try {
+    linkedinEnrichmentService.clearCache();
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      message: 'LinkedIn search cache cleared successfully'
+    });
+
+  } catch (error) {
+    console.error('Failed to clear cache:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      timestamp: new Date().toISOString(),
       error: {
         message: error.message,
         type: error.name || 'UnknownError'

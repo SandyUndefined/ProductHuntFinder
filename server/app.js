@@ -121,6 +121,128 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+// Admin API routes for maker approval/rejection
+app.get('/api/makers', async (req, res) => {
+  try {
+    const { status } = req.query;
+    let products;
+
+    if (status) {
+      products = await dbService.getProductsByStatus(status);
+    } else {
+      products = await dbService.getAllProducts();
+    }
+
+    res.json({
+      success: true,
+      count: products.length,
+      makers: products
+    });
+  } catch (error) {
+    console.error('Error fetching makers:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch makers',
+        details: error.message
+      }
+    });
+  }
+});
+
+app.post('/api/makers/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const success = await dbService.updateProductStatus(id, 'approved');
+    
+    if (success) {
+      res.json({
+        success: true,
+        message: 'Maker approved successfully'
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: {
+          message: 'Maker not found'
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error approving maker:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to approve maker',
+        details: error.message
+      }
+    });
+  }
+});
+
+app.post('/api/makers/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const success = await dbService.updateProductStatus(id, 'rejected');
+    
+    if (success) {
+      res.json({
+        success: true,
+        message: 'Maker rejected successfully'
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: {
+          message: 'Maker not found'
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error rejecting maker:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to reject maker',
+        details: error.message
+      }
+    });
+  }
+});
+
+// Debug route for enriched entries
+app.get('/api/debug/enriched', async (req, res) => {
+  try {
+    const allProducts = await dbService.getAllProducts();
+    const enrichedProducts = allProducts.filter(product => product.linkedin !== null);
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      count: enrichedProducts.length,
+      products: enrichedProducts.map(product => ({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        makerName: product.makerName,
+        linkedin: product.linkedin,
+        publishedAt: product.publishedAt,
+        createdAt: product.createdAt,
+        updatedAt: product.updatedAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching enriched products:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch enriched products',
+        details: error.message
+      }
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
@@ -150,12 +272,16 @@ if (process.env.NODE_ENV === 'production') {
       status: 'running',
       timestamp: new Date().toISOString(),
       endpoints: {
-        'POST /api/cron/fetch': 'Trigger RSS feed fetching for all categories',
+        'POST /api/cron/fetch': 'Trigger RSS feed fetching for all categories (includes LinkedIn enrichment)',
         'POST /api/cron/fetch/:category': 'Trigger RSS feed fetching for specific category',
+        'POST /api/cron/enrich': 'Trigger LinkedIn enrichment for pending products',
+        'GET /api/cron/enrich/status': 'Get LinkedIn enrichment cache status and statistics',
+        'POST /api/cron/enrich/clear-cache': 'Clear the LinkedIn search cache',
         'GET /api/cron/status': 'Get current status and statistics',
         'POST /api/cron/test/:category': 'Test RSS parsing for a category',
         'GET /api/products': 'Get all products (supports ?category and ?status filters)',
         'GET /api/products/category/:category': 'Get products by category',
+        'GET /api/debug/enriched': 'Get all products with LinkedIn profiles (for testing)',
         'GET /api/stats': 'Get database statistics',
         'GET /api/health': 'Health check endpoint'
       },

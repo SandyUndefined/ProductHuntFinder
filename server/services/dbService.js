@@ -132,6 +132,7 @@ class DatabaseService {
         publishedAt: productData.publishedAt,
         phLink: productData.phLink,
         makerName: productData.makerName || null,
+        linkedin: productData.linkedin || null,
         status: 'pending',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -230,14 +231,75 @@ class DatabaseService {
   }
 
   /**
+   * Update a product with LinkedIn information
+   * @param {string} productId - Product ID
+   * @param {string|null} linkedin - LinkedIn profile URL or null
+   * @returns {Promise<Object|null>} - Updated product or null if not found
+   */
+  async updateProductLinkedIn(productId, linkedin) {
+    try {
+      const product = await this.getItem(`product:${productId}`);
+      if (!product) {
+        console.error(`Product not found: ${productId}`);
+        return null;
+      }
+
+      // Update LinkedIn field and timestamp
+      product.linkedin = linkedin;
+      product.updatedAt = new Date().toISOString();
+
+      // Save back to database
+      await this.setItem(`product:${productId}`, product);
+      
+      console.log(`Updated LinkedIn for product: ${product.name} -> ${linkedin || 'null'}`);
+      return product;
+    } catch (error) {
+      console.error('Error updating product LinkedIn:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get products that need LinkedIn enrichment
+   * @returns {Promise<Array>} - Array of products needing LinkedIn enrichment
+   */
+  async getProductsNeedingEnrichment() {
+    try {
+      const allProducts = await this.getAllProducts();
+      return allProducts.filter(product => 
+        product.status === 'pending' && 
+        (product.linkedin === null || product.linkedin === undefined) && 
+        product.makerName !== null
+      );
+    } catch (error) {
+      console.error('Error getting products needing enrichment:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get database statistics
    * @returns {Promise<Object>} - Statistics about the database
    */
   async getStats() {
     try {
       const products = await this.getAllProducts();
+      
+      // A product is considered enriched if it has been processed (linkedin field exists, even if null)
+      const enrichedCount = products.filter(p => p.hasOwnProperty('linkedin')).length;
+      
+      // A product needs enrichment if it's pending, has a maker name, but hasn't been processed yet
+      const needingEnrichmentCount = products.filter(p => 
+        p.status === 'pending' && 
+        !p.hasOwnProperty('linkedin') && 
+        p.makerName !== null
+      ).length;
+
       const stats = {
         totalProducts: products.length,
+        enrichedProducts: enrichedCount,
+        needingEnrichment: needingEnrichmentCount,
+        linkedinFound: products.filter(p => p.linkedin && p.linkedin !== null).length,
         byCategory: {},
         byStatus: {},
         lastUpdated: products.length > 0 ? products[0].createdAt : null
