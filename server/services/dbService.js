@@ -260,6 +260,39 @@ class DatabaseService {
   }
 
   /**
+   * Update a product's status (approve/reject)
+   * @param {string} productId - Product ID
+   * @param {string} status - New status ('approved' or 'rejected')
+   * @returns {Promise<boolean>} - Success status
+   */
+  async updateProductStatus(productId, status) {
+    try {
+      const product = await this.getItem(`product:${productId}`);
+      if (!product) {
+        console.error(`Product not found: ${productId}`);
+        return false;
+      }
+
+      // Update status and timestamp
+      product.status = status;
+      product.updatedAt = new Date().toISOString();
+      
+      if (status === 'approved') {
+        product.approvedAt = new Date().toISOString();
+      }
+
+      // Save back to database
+      await this.setItem(`product:${productId}`, product);
+      
+      console.log(`Updated status for product: ${product.name} -> ${status}`);
+      return true;
+    } catch (error) {
+      console.error('Error updating product status:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get products that need LinkedIn enrichment
    * @returns {Promise<Array>} - Array of products needing LinkedIn enrichment
    */
