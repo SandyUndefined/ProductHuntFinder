@@ -122,21 +122,31 @@ class RSSService {
         return null;
       }
 
+      // Extract description from various possible fields
+      let description = '';
+      if (item.content) {
+        description = item.content;
+      } else if (item.description) {
+        description = item.description;
+      } else if (item.rawDescription) {
+        description = item.rawDescription;
+      }
+
       // Extract maker name from various possible fields
       let makerName = null;
       if (item.creator) {
         makerName = item.creator;
       } else if (item.author) {
         makerName = item.author;
-      } else if (item.content || item.rawDescription) {
+      } else if (description) {
         // Try to extract maker from content or description
-        makerName = this.extractMakerFromContent(item.content || item.rawDescription);
+        makerName = this.extractMakerFromContent(description);
       }
 
       // Clean and format the data
       const productData = {
         name: this.cleanTitle(item.title),
-        description: this.cleanDescription(item.description || item.rawDescription || ''),
+        description: this.cleanDescription(description),
         category: category,
         publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
         phLink: item.link,
@@ -176,8 +186,10 @@ class RSSService {
    * @returns {string} - Cleaned description
    */
   cleanDescription(description) {
+    if (!description) return '';
+    
     // Remove HTML tags and clean up
-    return description
+    let cleaned = description
       .replace(/<[^>]*>/g, '') // Remove HTML tags
       .replace(/&quot;/g, '"')
       .replace(/&amp;/g, '&')
@@ -185,8 +197,21 @@ class RSSService {
       .replace(/&gt;/g, '>')
       .replace(/&nbsp;/g, ' ')
       .replace(/\s+/g, ' ') // Normalize whitespace
-      .trim()
-      .substring(0, 500); // Limit length
+      .trim();
+
+    // Remove Product Hunt specific footer content (Discussion | Link)
+    cleaned = cleaned
+      .replace(/Discussion\s*\|\s*Link\s*$/i, '')
+      .replace(/Discussion\s*$/i, '')
+      .replace(/\|\s*Link\s*$/i, '')
+      .trim();
+
+    // If description is too short or meaningless, return empty
+    if (cleaned.length < 10 || cleaned.toLowerCase() === 'no description' || cleaned === '|') {
+      return '';
+    }
+
+    return cleaned.substring(0, 500); // Limit length
   }
 
   /**
