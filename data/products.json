@@ -710,10 +710,11 @@
       "publishedAt": "2025-06-19T09:53:38.000Z",
       "phLink": "https://www.producthunt.com/posts/gram-by-speakeasy",
       "makerName": "flo merian",
-      "status": "pending",
+      "status": "approved",
       "createdAt": "2025-06-22T17:27:30.063Z",
-      "updatedAt": "2025-06-22T20:15:05.879Z",
-      "linkedin": null
+      "updatedAt": "2025-06-22T20:22:42.909Z",
+      "linkedin": null,
+      "approvedAt": "2025-06-22T20:22:42.909Z"
     },
     "c57a5549-0be9-4dce-8388-5bb4e8420c74": {
       "id": "c57a5549-0be9-4dce-8388-5bb4e8420c74",
@@ -1910,7 +1911,7 @@
     "a910ce0d-32dd-418f-9637-ebbb1c4742b2"
   ],
   "metadata": {
-    "lastUpdated": "2025-06-22T20:15:05.966Z",
+    "lastUpdated": "2025-06-22T20:22:42.910Z",
     "totalCount": 135
   },
   "cache": {
