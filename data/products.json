@@ -168,10 +168,11 @@
       "publishedAt": "2025-06-19T11:02:08.000Z",
       "phLink": "https://www.producthunt.com/posts/adcreative-ai-video-era",
       "makerName": "Tufan Gok",
-      "status": "pending",
+      "status": "approved",
       "createdAt": "2025-06-22T17:27:28.737Z",
-      "updatedAt": "2025-06-22T19:32:14.039Z",
-      "linkedin": null
+      "updatedAt": "2025-06-22T20:00:08.884Z",
+      "linkedin": null,
+      "approvedAt": "2025-06-22T20:00:08.884Z"
     },
     "f3122136-2401-4d8d-9ec5-1fdde6f74b78": {
       "id": "f3122136-2401-4d8d-9ec5-1fdde6f74b78",
@@ -247,10 +248,11 @@
       "publishedAt": "2025-06-19T02:19:10.000Z",
       "phLink": "https://www.producthunt.com/posts/midjourney-v1-video-model",
       "makerName": "Chris Messina",
-      "status": "pending",
+      "status": "approved",
       "createdAt": "2025-06-22T17:27:28.750Z",
-      "updatedAt": "2025-06-22T19:32:16.559Z",
-      "linkedin": null
+      "updatedAt": "2025-06-22T20:00:12.778Z",
+      "linkedin": null,
+      "approvedAt": "2025-06-22T20:00:12.778Z"
     },
     "0ac9d32e-a238-4e9e-b28c-d94aa9302c6e": {
       "id": "0ac9d32e-a238-4e9e-b28c-d94aa9302c6e",
@@ -351,10 +353,11 @@
       "publishedAt": "2025-06-19T02:50:52.000Z",
       "phLink": "https://www.producthunt.com/posts/google-search-live",
       "makerName": "Zac Zuo",
-      "status": "pending",
+      "status": "approved",
       "createdAt": "2025-06-22T17:27:28.766Z",
-      "updatedAt": "2025-06-22T19:32:16.056Z",
-      "linkedin": null
+      "updatedAt": "2025-06-22T20:00:17.139Z",
+      "linkedin": null,
+      "approvedAt": "2025-06-22T20:00:17.139Z"
     },
     "535979e2-49e9-4c14-ae3b-ebe81c38936b": {
       "id": "535979e2-49e9-4c14-ae3b-ebe81c38936b",
@@ -390,10 +393,11 @@
       "publishedAt": "2025-06-19T00:38:23.000Z",
       "phLink": "https://www.producthunt.com/posts/ittybit",
       "makerName": "Nathan Baschez",
-      "status": "pending",
+      "status": "approved",
       "createdAt": "2025-06-22T17:27:28.776Z",
-      "updatedAt": "2025-06-22T19:32:17.063Z",
-      "linkedin": null
+      "updatedAt": "2025-06-22T20:00:15.308Z",
+      "linkedin": null,
+      "approvedAt": "2025-06-22T20:00:15.308Z"
     },
     "30b910c7-9ccf-4584-a105-f9cbdc4bbf95": {
       "id": "30b910c7-9ccf-4584-a105-f9cbdc4bbf95",
@@ -455,10 +459,11 @@
       "publishedAt": "2025-06-19T04:45:01.000Z",
       "phLink": "https://www.producthunt.com/posts/humans-vs-llms",
       "makerName": "Sanket Nadhani",
-      "status": "pending",
+      "status": "approved",
       "createdAt": "2025-06-22T17:27:28.790Z",
-      "updatedAt": "2025-06-22T19:32:15.553Z",
-      "linkedin": null
+      "updatedAt": "2025-06-22T20:00:19.363Z",
+      "linkedin": null,
+      "approvedAt": "2025-06-22T20:00:19.363Z"
     },
     "f20fb510-878a-4cee-8002-0ddd87e62316": {
       "id": "f20fb510-878a-4cee-8002-0ddd87e62316",
@@ -663,10 +668,11 @@
       "publishedAt": "2025-06-19T09:50:47.000Z",
       "phLink": "https://www.producthunt.com/posts/arocrypt",
       "makerName": "AroCodes",
-      "status": "pending",
+      "status": "approved",
       "createdAt": "2025-06-22T17:27:30.031Z",
-      "updatedAt": "2025-06-22T19:32:15.049Z",
-      "linkedin": null
+      "updatedAt": "2025-06-22T20:00:11.718Z",
+      "linkedin": null,
+      "approvedAt": "2025-06-22T20:00:11.718Z"
     },
     "1810bae0-d279-478b-beb4-d70db81a7ff4": {
       "id": "1810bae0-d279-478b-beb4-d70db81a7ff4",
@@ -1225,10 +1231,11 @@
       "publishedAt": "2025-06-19T13:42:31.000Z",
       "phLink": "https://www.producthunt.com/posts/letmecheck-ai",
       "makerName": "Joel Andriyas - AI First Developer",
-      "status": "pending",
+      "status": "approved",
       "createdAt": "2025-06-22T17:27:31.018Z",
-      "updatedAt": "2025-06-22T19:32:13.536Z",
-      "linkedin": null
+      "updatedAt": "2025-06-22T20:00:10.092Z",
+      "linkedin": null,
+      "approvedAt": "2025-06-22T20:00:10.092Z"
     },
     "45bd396d-9222-4c4d-83a7-37f0f3cc4044": {
       "id": "45bd396d-9222-4c4d-83a7-37f0f3cc4044",
@@ -1888,7 +1895,7 @@
     "99c1c26e-b235-4d71-a2d3-a9981ebe7b3a"
   ],
   "metadata": {
-    "lastUpdated": "2025-06-22T19:33:15.627Z",
+    "lastUpdated": "2025-06-22T20:00:19.364Z",
     "totalCount": 134
   },
   "cache": {

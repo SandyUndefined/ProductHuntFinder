@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 const AdminPanel = () => {
   const [makers, setMakers] = useState([]);
   const [filteredMakers, setFilteredMakers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [statusFilter, setStatusFilter] = useState('pending');
@@ -38,17 +38,12 @@ const AdminPanel = () => {
     try {
       const response = await fetch('/api/health');
       if (response.ok) {
-        // Server is running, try to get auth method from root endpoint
-        const rootResponse = await fetch('/');
-        if (rootResponse.ok) {
-          const data = await rootResponse.json();
-          if (data.authentication?.method) {
-            setAuthMethod(data.authentication.method);
-          }
-        }
+        // Server is running, use default authentication method
+        setAuthMethod('basic');
       }
     } catch (err) {
       console.log('Could not fetch auth info, using default');
+      setAuthMethod('basic');
     }
   };
 
