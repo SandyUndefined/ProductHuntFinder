@@ -91,10 +91,26 @@ const MainDashboard = () => {
       const data = await response.json();
 
       if (data.success) {
-        setMessage({
-          type: 'success',
-          text: `RSS fetch completed! Processed: ${data.results.summary.totalProcessed}, New: ${data.results.summary.totalNew}, Duplicates: ${data.results.summary.totalDuplicates}`
-        });
+        if (data.skipped) {
+          // Handle skipped response (rate limited)
+          setMessage({
+            type: 'success',
+            text: `RSS fetch skipped: ${data.reason}`
+          });
+        } else if (data.results && data.results.rss && data.results.rss.summary) {
+          // Handle normal response with results
+          const summary = data.results.rss.summary;
+          setMessage({
+            type: 'success',
+            text: `RSS fetch completed! Processed: ${summary.totalProcessed}, New: ${summary.totalNew}, Duplicates: ${summary.totalDuplicates}`
+          });
+        } else {
+          // Fallback for any other success response
+          setMessage({
+            type: 'success',
+            text: 'RSS fetch completed successfully'
+          });
+        }
         
         // Reload products and stats
         await loadProducts();
