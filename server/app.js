@@ -9,6 +9,7 @@ const cronRoutes = require('./routes/cron');
 
 // Import services
 const dbService = require('./services/dbService');
+const googleSheetsService = require('./services/googleSheetsService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -153,21 +154,51 @@ app.get('/api/makers', async (req, res) => {
 app.post('/api/makers/:id/approve', async (req, res) => {
   try {
     const { id } = req.params;
-    const success = await dbService.updateProductStatus(id, 'approved');
     
-    if (success) {
-      res.json({
-        success: true,
-        message: 'Maker approved successfully'
-      });
-    } else {
-      res.status(404).json({
+    // First get the product data before approval
+    const productIds = await dbService.getProductList();
+    const product = await dbService.getItem(`product:${id}`);
+    
+    if (!product) {
+      return res.status(404).json({
         success: false,
         error: {
           message: 'Maker not found'
         }
       });
     }
+
+    // Update the product status to approved
+    const success = await dbService.updateProductStatus(id, 'approved');
+    
+    if (!success) {
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: 'Failed to update product status'
+        }
+      });
+    }
+
+    // Try to sync to Google Sheets (don't block approval if this fails)
+    let sheetsResult = { synced: false, error: null };
+    
+    try {
+      await googleSheetsService.addApprovedMaker(product);
+      await dbService.updateProductSheetsSyncStatus(id, true);
+      sheetsResult.synced = true;
+      console.log(`Successfully synced approved maker to Google Sheets: ${product.name}`);
+    } catch (sheetsError) {
+      console.error('Failed to sync to Google Sheets:', sheetsError.message);
+      sheetsResult.error = sheetsError.message;
+      // Don't update sync status to true on failure - will be retried later
+    }
+
+    res.json({
+      success: true,
+      message: 'Maker approved successfully',
+      sheets: sheetsResult
+    });
   } catch (error) {
     console.error('Error approving maker:', error);
     res.status(500).json({
@@ -204,6 +235,99 @@ app.post('/api/makers/:id/reject', async (req, res) => {
       success: false,
       error: {
         message: 'Failed to reject maker',
+        details: error.message
+      }
+    });
+  }
+});
+
+// Google Sheets resync endpoint (for cron or manual retry)
+app.post('/api/cron/resync-sheets', async (req, res) => {
+  try {
+    // Get all approved products that haven't been synced to sheets yet
+    const needingSyncProducts = await dbService.getApprovedProductsNeedingSync();
+    
+    if (needingSyncProducts.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No products need syncing to Google Sheets',
+        processed: 0,
+        results: []
+      });
+    }
+
+    const results = [];
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const product of needingSyncProducts) {
+      try {
+        await googleSheetsService.addApprovedMaker(product);
+        await dbService.updateProductSheetsSyncStatus(product.id, true);
+        
+        results.push({
+          productId: product.id,
+          productName: product.name,
+          success: true
+        });
+        successCount++;
+        
+        console.log(`Successfully synced to Google Sheets: ${product.name}`);
+      } catch (error) {
+        results.push({
+          productId: product.id,
+          productName: product.name,
+          success: false,
+          error: error.message
+        });
+        failureCount++;
+        
+        console.error(`Failed to sync ${product.name} to Google Sheets:`, error.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Processed ${needingSyncProducts.length} products`,
+      processed: needingSyncProducts.length,
+      successCount,
+      failureCount,
+      results
+    });
+  } catch (error) {
+    console.error('Error during sheets resync:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to resync to Google Sheets',
+        details: error.message
+      }
+    });
+  }
+});
+
+// Google Sheets status endpoint
+app.get('/api/sheets/status', async (req, res) => {
+  try {
+    const sheetsStatus = await googleSheetsService.getSyncStatus();
+    const dbStats = await dbService.getStats();
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      googleSheets: sheetsStatus,
+      database: {
+        approvedProducts: dbStats.approvedProducts,
+        syncedToSheets: dbStats.syncedToSheets,
+        needingSheetsSync: dbStats.needingSheetsSync
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching sheets status:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch sheets status',
         details: error.message
       }
     });
@@ -277,10 +401,15 @@ if (process.env.NODE_ENV === 'production') {
         'POST /api/cron/enrich': 'Trigger LinkedIn enrichment for pending products',
         'GET /api/cron/enrich/status': 'Get LinkedIn enrichment cache status and statistics',
         'POST /api/cron/enrich/clear-cache': 'Clear the LinkedIn search cache',
+        'POST /api/cron/resync-sheets': 'Resync approved products to Google Sheets (retry failed syncs)',
         'GET /api/cron/status': 'Get current status and statistics',
         'POST /api/cron/test/:category': 'Test RSS parsing for a category',
         'GET /api/products': 'Get all products (supports ?category and ?status filters)',
         'GET /api/products/category/:category': 'Get products by category',
+        'GET /api/makers': 'Get all makers (supports ?status filter)',
+        'POST /api/makers/:id/approve': 'Approve a maker (auto-syncs to Google Sheets)',
+        'POST /api/makers/:id/reject': 'Reject a maker',
+        'GET /api/sheets/status': 'Get Google Sheets sync status and statistics',
         'GET /api/debug/enriched': 'Get all products with LinkedIn profiles (for testing)',
         'GET /api/stats': 'Get database statistics',
         'GET /api/health': 'Health check endpoint'

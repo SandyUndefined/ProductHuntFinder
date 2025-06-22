@@ -134,6 +134,7 @@ class DatabaseService {
         makerName: productData.makerName || null,
         linkedin: productData.linkedin || null,
         status: 'pending',
+        syncedToSheets: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -311,6 +312,56 @@ class DatabaseService {
   }
 
   /**
+   * Update a product's Google Sheets sync status
+   * @param {string} productId - Product ID
+   * @param {boolean} synced - Whether the product has been synced to sheets
+   * @returns {Promise<boolean>} - Success status
+   */
+  async updateProductSheetsSyncStatus(productId, synced) {
+    try {
+      const product = await this.getItem(`product:${productId}`);
+      if (!product) {
+        console.error(`Product not found: ${productId}`);
+        return false;
+      }
+
+      // Update sync status and timestamp
+      product.syncedToSheets = synced;
+      product.updatedAt = new Date().toISOString();
+      
+      if (synced) {
+        product.syncedToSheetsAt = new Date().toISOString();
+      }
+
+      // Save back to database
+      await this.setItem(`product:${productId}`, product);
+      
+      console.log(`Updated sheets sync status for product: ${product.name} -> ${synced}`);
+      return true;
+    } catch (error) {
+      console.error('Error updating product sheets sync status:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get approved products that need to be synced to Google Sheets
+   * @returns {Promise<Array>} - Array of approved products not yet synced
+   */
+  async getApprovedProductsNeedingSync() {
+    try {
+      const allProducts = await this.getAllProducts();
+      return allProducts.filter(product => 
+        product.status === 'approved' && 
+        !product.syncedToSheets
+      );
+    } catch (error) {
+      console.error('Error getting approved products needing sync:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get database statistics
    * @returns {Promise<Object>} - Statistics about the database
    */
@@ -333,6 +384,9 @@ class DatabaseService {
         enrichedProducts: enrichedCount,
         needingEnrichment: needingEnrichmentCount,
         linkedinFound: products.filter(p => p.linkedin && p.linkedin !== null).length,
+        approvedProducts: products.filter(p => p.status === 'approved').length,
+        syncedToSheets: products.filter(p => p.syncedToSheets === true).length,
+        needingSheetsSync: products.filter(p => p.status === 'approved' && !p.syncedToSheets).length,
         byCategory: {},
         byStatus: {},
         lastUpdated: products.length > 0 ? products[0].createdAt : null
