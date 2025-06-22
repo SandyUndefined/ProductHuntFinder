@@ -1,0 +1,262 @@
+const { v4: uuidv4 } = require('uuid');
+const fs = require('fs').promises;
+const path = require('path');
+
+class DatabaseService {
+  constructor() {
+    // Always use local storage
+    this.storage = 'local';
+    this.dbPath = path.join(process.cwd(), 'data', 'products.json');
+    this.initLocalStorage();
+  }
+
+  async initLocalStorage() {
+    try {
+      const dir = path.dirname(this.dbPath);
+      await fs.mkdir(dir, { recursive: true });
+      
+      // Check if file exists, if not create it with empty structure
+      try {
+        await fs.access(this.dbPath);
+      } catch {
+        await fs.writeFile(this.dbPath, JSON.stringify({
+          products: {},
+          productList: [],
+          metadata: {
+            lastUpdated: null,
+            totalCount: 0
+          }
+        }, null, 2));
+      }
+    } catch (error) {
+      console.error('Error initializing local storage:', error);
+    }
+  }
+
+  async readLocalData() {
+    try {
+      const data = await fs.readFile(this.dbPath, 'utf8');
+      return JSON.parse(data);
+    } catch (error) {
+      console.error('Error reading local data:', error);
+      return { 
+        products: {}, 
+        productList: [],
+        metadata: { lastUpdated: null, totalCount: 0 } 
+      };
+    }
+  }
+
+  async writeLocalData(data) {
+    try {
+      await fs.writeFile(this.dbPath, JSON.stringify(data, null, 2));
+    } catch (error) {
+      console.error('Error writing local data:', error);
+    }
+  }
+
+  async getItem(key) {
+    try {
+      const data = await this.readLocalData();
+      if (key === 'product:list') {
+        return data.productList;
+      } else if (key.startsWith('product:')) {
+        const productId = key.replace('product:', '');
+        return data.products[productId] || null;
+      } else if (key === 'metadata') {
+        return data.metadata;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error getting item ${key}:`, error);
+      return null;
+    }
+  }
+
+  async setItem(key, value) {
+    try {
+      const data = await this.readLocalData();
+      
+      if (key === 'product:list') {
+        data.productList = value;
+      } else if (key.startsWith('product:')) {
+        const productId = key.replace('product:', '');
+        data.products[productId] = value;
+        data.metadata.totalCount = Object.keys(data.products).length;
+        data.metadata.lastUpdated = new Date().toISOString();
+      } else if (key === 'metadata') {
+        data.metadata = value;
+      }
+      
+      await this.writeLocalData(data);
+      return true;
+    } catch (error) {
+      console.error(`Error setting item ${key}:`, error);
+      return false;
+    }
+  }
+
+  async getProductList() {
+    const list = await this.getItem('product:list');
+    return list || [];
+  }
+
+  async addToProductList(productId) {
+    const list = await this.getProductList();
+    if (!list.includes(productId)) {
+      list.push(productId);
+      await this.setItem('product:list', list);
+    }
+  }
+
+  /**
+   * Store a product in the database
+   * @param {Object} productData - Product information
+   * @returns {Promise<Object>} - Saved product with ID
+   */
+  async saveProduct(productData) {
+    try {
+      // Check for duplicates by link
+      const existingProduct = await this.findProductByLink(productData.phLink);
+      if (existingProduct) {
+        console.log(`Product already exists: ${productData.name}`);
+        return existingProduct;
+      }
+
+      // Create new product with ID and timestamps
+      const product = {
+        id: uuidv4(),
+        name: productData.name,
+        description: productData.description,
+        category: productData.category,
+        publishedAt: productData.publishedAt,
+        phLink: productData.phLink,
+        makerName: productData.makerName || null,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Save to database
+      const key = `product:${product.id}`;
+      await this.setItem(key, product);
+
+      // Also maintain a list of all product IDs for efficient querying
+      await this.addToProductList(product.id);
+
+      console.log(`Product saved: ${product.name} [${product.category}]`);
+      return product;
+    } catch (error) {
+      console.error('Error saving product:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find a product by its Product Hunt link
+   * @param {string} phLink - Product Hunt link
+   * @returns {Promise<Object|null>} - Product or null if not found
+   */
+  async findProductByLink(phLink) {
+    try {
+      const productIds = await this.getProductList();
+      
+      for (const id of productIds) {
+        const product = await this.getItem(`product:${id}`);
+        if (product && product.phLink === phLink) {
+          return product;
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error finding product by link:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get all products
+   * @returns {Promise<Array>} - Array of all products
+   */
+  async getAllProducts() {
+    try {
+      const productIds = await this.getProductList();
+      const products = [];
+
+      for (const id of productIds) {
+        const product = await this.getItem(`product:${id}`);
+        if (product) {
+          products.push(product);
+        }
+      }
+
+      // Sort by publishedAt date (newest first)
+      return products.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    } catch (error) {
+      console.error('Error getting all products:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get products by category
+   * @param {string} category - Category to filter by
+   * @returns {Promise<Array>} - Array of products in the category
+   */
+  async getProductsByCategory(category) {
+    try {
+      const allProducts = await this.getAllProducts();
+      return allProducts.filter(product => product.category === category);
+    } catch (error) {
+      console.error('Error getting products by category:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get products by status
+   * @param {string} status - Status to filter by
+   * @returns {Promise<Array>} - Array of products with the status
+   */
+  async getProductsByStatus(status) {
+    try {
+      const allProducts = await this.getAllProducts();
+      return allProducts.filter(product => product.status === status);
+    } catch (error) {
+      console.error('Error getting products by status:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get database statistics
+   * @returns {Promise<Object>} - Statistics about the database
+   */
+  async getStats() {
+    try {
+      const products = await this.getAllProducts();
+      const stats = {
+        totalProducts: products.length,
+        byCategory: {},
+        byStatus: {},
+        lastUpdated: products.length > 0 ? products[0].createdAt : null
+      };
+
+      products.forEach(product => {
+        // Count by category
+        stats.byCategory[product.category] = (stats.byCategory[product.category] || 0) + 1;
+        
+        // Count by status
+        stats.byStatus[product.status] = (stats.byStatus[product.status] || 0) + 1;
+      });
+
+      return stats;
+    } catch (error) {
+      console.error('Error getting stats:', error);
+      return { totalProducts: 0, byCategory: {}, byStatus: {} };
+    }
+  }
+}
+
+module.exports = new DatabaseService();
