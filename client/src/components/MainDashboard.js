@@ -126,29 +126,33 @@ const MainDashboard = () => {
   };
 
   return (
-    <div className="main-dashboard">
-      {/* Header */}
-      <header className="dashboard-header">
-        <div className="header-content">
-          <p>Discover and track the latest products from Product Hunt by category</p>
+    <div className="bg-gray-50 min-h-screen">
+      {/* Header Stats Section */}
+      <header className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white py-12 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-8">
+            <p className="text-xl text-gray-100 mb-6">
+              Discover and track the latest products from Product Hunt by category
+            </p>
+          </div>
           
           {stats && (
-            <div className="stats-bar">
-              <div className="stat-item">
-                <span className="stat-number">{stats.totalProducts}</span>
-                <span className="stat-label">Total Products</span>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+              <div className="bg-white bg-opacity-10 rounded-lg p-4">
+                <div className="text-3xl font-bold mb-2">{stats.totalProducts}</div>
+                <div className="text-sm text-gray-200">Total Products</div>
               </div>
-              <div className="stat-item">
-                <span className="stat-number">{Object.keys(stats.byCategory || {}).length}</span>
-                <span className="stat-label">Categories</span>
+              <div className="bg-white bg-opacity-10 rounded-lg p-4">
+                <div className="text-3xl font-bold mb-2">{Object.keys(stats.byCategory || {}).length}</div>
+                <div className="text-sm text-gray-200">Categories</div>
               </div>
-              <div className="stat-item">
-                <span className="stat-number">{stats.byStatus?.pending || 0}</span>
-                <span className="stat-label">Pending Review</span>
+              <div className="bg-white bg-opacity-10 rounded-lg p-4">
+                <div className="text-3xl font-bold mb-2">{stats.byStatus?.pending || 0}</div>
+                <div className="text-sm text-gray-200">Pending Review</div>
               </div>
-              <div className="stat-item">
-                <span className="stat-number">{stats.byStatus?.approved || 0}</span>
-                <span className="stat-label">Approved</span>
+              <div className="bg-white bg-opacity-10 rounded-lg p-4">
+                <div className="text-3xl font-bold mb-2">{stats.byStatus?.approved || 0}</div>
+                <div className="text-sm text-gray-200">Approved</div>
               </div>
             </div>
           )}
@@ -156,16 +160,19 @@ const MainDashboard = () => {
       </header>
 
       {/* Main Content */}
-      <main className="main-content">
+      <main className="max-w-7xl mx-auto px-4 py-8">
         {/* Controls */}
-        <div className="controls">
-          <div className="controls-row">
-            <div className="control-group">
-              <label htmlFor="category-filter">Filter by Category:</label>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <div className="flex flex-col">
+              <label htmlFor="category-filter" className="block text-sm font-semibold text-gray-700 mb-2">
+                Filter by Category:
+              </label>
               <select
                 id="category-filter"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
+                className="form-input"
               >
                 <option value="all">All Categories</option>
                 {categories.map(category => (
@@ -176,12 +183,15 @@ const MainDashboard = () => {
               </select>
             </div>
 
-            <div className="control-group">
-              <label htmlFor="status-filter">Filter by Status:</label>
+            <div className="flex flex-col">
+              <label htmlFor="status-filter" className="block text-sm font-semibold text-gray-700 mb-2">
+                Filter by Status:
+              </label>
               <select
                 id="status-filter"
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
+                className="form-input"
               >
                 <option value="all">All Status</option>
                 <option value="pending">Pending</option>
@@ -190,8 +200,8 @@ const MainDashboard = () => {
               </select>
             </div>
 
-            <div className="control-group">
-              <label>&nbsp;</label>
+            <div className="flex flex-col">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">&nbsp;</label>
               <button
                 className="btn-primary"
                 onClick={handleFetchRSS}
@@ -199,17 +209,22 @@ const MainDashboard = () => {
               >
                 {fetching ? (
                   <>
-                    <span className="loading-spinner"></span>
+                    <div className="loading-spinner"></div>
                     Fetching RSS...
                   </>
                 ) : (
-                  '🔄 Fetch Latest Products'
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Fetch Latest Products
+                  </>
                 )}
               </button>
             </div>
 
-            <div className="control-group">
-              <label>&nbsp;</label>
+            <div className="flex flex-col">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">&nbsp;</label>
               <button
                 onClick={loadProducts}
                 disabled={loading}
@@ -217,11 +232,16 @@ const MainDashboard = () => {
               >
                 {loading ? (
                   <>
-                    <span className="loading-spinner"></span>
+                    <div className="loading-spinner"></div>
                     Refreshing...
                   </>
                 ) : (
-                  '↻ Refresh'
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </>
                 )}
               </button>
             </div>
@@ -230,24 +250,32 @@ const MainDashboard = () => {
 
         {/* Messages */}
         {error && (
-          <div className="error">
+          <div className="error-message relative mb-6">
             <strong>Error:</strong> {error}
-            <button onClick={clearMessage} className="close-btn">×</button>
+            <button onClick={clearMessage} className="absolute top-4 right-4 text-red-500 hover:text-red-700">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         )}
 
         {message && (
-          <div className={message.type}>
+          <div className="success-message relative mb-6">
             <strong>Success:</strong> {message.text}
-            <button onClick={clearMessage} className="close-btn">×</button>
+            <button onClick={clearMessage} className="absolute top-4 right-4 text-green-500 hover:text-green-700">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         )}
 
         {/* Products */}
         {loading ? (
-          <div className="loading">
-            <div className="loading-spinner"></div>
-            Loading products...
+          <div className="text-center py-12">
+            <div className="loading-spinner mx-auto"></div>
+            <p className="text-gray-600 mt-4">Loading products...</p>
           </div>
         ) : (
           <ProductList 
