@@ -10,6 +10,11 @@ const cronRoutes = require('./routes/cron');
 // Import services
 const dbService = require('./services/dbService');
 const googleSheetsService = require('./services/googleSheetsService');
+const scheduleService = require('./services/scheduleService');
+const cacheService = require('./services/cacheService');
+
+// Import middleware
+const { auth, logAuthAttempt } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -122,8 +127,67 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-// Admin API routes for maker approval/rejection
-app.get('/api/makers', async (req, res) => {
+// Status endpoint (with optional light authentication)
+app.get('/api/status', async (req, res) => {
+  try {
+    const stats = await dbService.getStats();
+    const scheduleStatus = await scheduleService.getScheduleStatus();
+    const cacheStats = await cacheService.getCacheStats();
+    
+    // Get last cron run info
+    const lastCronRun = scheduleStatus.jobs['rss-fetch']?.lastRun || null;
+    
+    const statusInfo = {
+      success: true,
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      system: {
+        nodeVersion: process.version,
+        environment: process.env.NODE_ENV || 'development',
+        platform: process.platform
+      },
+      lastCronRun: lastCronRun ? {
+        timestamp: lastCronRun.timestamp,
+        duration: lastCronRun.results?.duration,
+        rssNewProducts: lastCronRun.results?.rss?.totalNew || 0,
+        enrichmentSuccessful: lastCronRun.results?.enrichment?.successfulEnrichments || 0
+      } : null,
+      makers: {
+        pending: stats.byStatus.pending || 0,
+        approved: stats.byStatus.approved || 0,
+        rejected: stats.byStatus.rejected || 0,
+        total: stats.totalProducts
+      },
+      enrichment: {
+        totalEnriched: stats.enrichedProducts,
+        needingEnrichment: stats.needingEnrichment,
+        linkedinFound: stats.linkedinFound
+      },
+      cache: {
+        linkedinCacheSize: cacheStats.inMemory?.size || 0,
+        databaseCacheEntries: cacheStats.database?.validEntries || 0
+      },
+      schedule: {
+        nextCronAllowed: scheduleStatus.jobs['rss-fetch']?.nextRunAllowed || null,
+        defaultIntervalHours: scheduleStatus.settings?.defaultIntervalHours || 4
+      }
+    };
+
+    res.json(statusInfo);
+  } catch (error) {
+    console.error('Error fetching status:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch status',
+        details: error.message
+      }
+    });
+  }
+});
+
+// Admin API routes for maker approval/rejection (protected)
+app.get('/api/makers', logAuthAttempt, auth, async (req, res) => {
   try {
     const { status } = req.query;
     let products;
@@ -151,7 +215,7 @@ app.get('/api/makers', async (req, res) => {
   }
 });
 
-app.post('/api/makers/:id/approve', async (req, res) => {
+app.post('/api/makers/:id/approve', logAuthAttempt, auth, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -211,7 +275,7 @@ app.post('/api/makers/:id/approve', async (req, res) => {
   }
 });
 
-app.post('/api/makers/:id/reject', async (req, res) => {
+app.post('/api/makers/:id/reject', logAuthAttempt, auth, async (req, res) => {
   try {
     const { id } = req.params;
     const success = await dbService.updateProductStatus(id, 'rejected');
@@ -241,8 +305,8 @@ app.post('/api/makers/:id/reject', async (req, res) => {
   }
 });
 
-// Google Sheets resync endpoint (for cron or manual retry)
-app.post('/api/cron/resync-sheets', async (req, res) => {
+// Google Sheets resync endpoint (for cron or manual retry) - protected
+app.post('/api/cron/resync-sheets', logAuthAttempt, auth, async (req, res) => {
   try {
     // Get all approved products that haven't been synced to sheets yet
     const needingSyncProducts = await dbService.getApprovedProductsNeedingSync();
@@ -401,18 +465,29 @@ if (process.env.NODE_ENV === 'production') {
         'POST /api/cron/enrich': 'Trigger LinkedIn enrichment for pending products',
         'GET /api/cron/enrich/status': 'Get LinkedIn enrichment cache status and statistics',
         'POST /api/cron/enrich/clear-cache': 'Clear the LinkedIn search cache',
-        'POST /api/cron/resync-sheets': 'Resync approved products to Google Sheets (retry failed syncs)',
+        'GET /api/cron/schedule/status': 'Get schedule status for all jobs',
+        'POST /api/cron/schedule/force/:jobName': 'Force a job to be runnable',
+        'POST /api/cron/cache/cleanup': 'Clean up expired cache entries',
+        'GET /api/cron/cache/stats': 'Get detailed cache statistics',
+        'POST /api/cron/resync-sheets': 'Resync approved products to Google Sheets (retry failed syncs) [AUTH REQUIRED]',
         'GET /api/cron/status': 'Get current status and statistics',
         'POST /api/cron/test/:category': 'Test RSS parsing for a category',
         'GET /api/products': 'Get all products (supports ?category and ?status filters)',
         'GET /api/products/category/:category': 'Get products by category',
-        'GET /api/makers': 'Get all makers (supports ?status filter)',
-        'POST /api/makers/:id/approve': 'Approve a maker (auto-syncs to Google Sheets)',
-        'POST /api/makers/:id/reject': 'Reject a maker',
+        'GET /api/makers': 'Get all makers (supports ?status filter) [AUTH REQUIRED]',
+        'POST /api/makers/:id/approve': 'Approve a maker (auto-syncs to Google Sheets) [AUTH REQUIRED]',
+        'POST /api/makers/:id/reject': 'Reject a maker [AUTH REQUIRED]',
         'GET /api/sheets/status': 'Get Google Sheets sync status and statistics',
         'GET /api/debug/enriched': 'Get all products with LinkedIn profiles (for testing)',
         'GET /api/stats': 'Get database statistics',
+        'GET /api/status': 'Get system status including cron runs and maker counts',
         'GET /api/health': 'Health check endpoint'
+      },
+      authentication: {
+        method: process.env.AUTH_METHOD || 'basic',
+        info: process.env.AUTH_METHOD === 'token' 
+          ? 'Use ?token=YOUR_TOKEN or X-Auth-Token header for protected endpoints'
+          : 'Use HTTP Basic Auth (username:password) for protected endpoints marked [AUTH REQUIRED]'
       },
       documentation: {
         categories: require('./config/rssCategories'),
@@ -420,7 +495,8 @@ if (process.env.NODE_ENV === 'production') {
           fetchAll: `POST ${req.protocol}://${req.get('host')}/api/cron/fetch`,
           fetchCategory: `POST ${req.protocol}://${req.get('host')}/api/cron/fetch/developer-tools`,
           getProducts: `GET ${req.protocol}://${req.get('host')}/api/products`,
-          getByCategory: `GET ${req.protocol}://${req.get('host')}/api/products/category/saas`
+          getByCategory: `GET ${req.protocol}://${req.get('host')}/api/products/category/saas`,
+          getStatus: `GET ${req.protocol}://${req.get('host')}/api/status`
         }
       }
     });
@@ -463,13 +539,27 @@ app.listen(PORT, () => {
   console.log(`• POST /api/cron/fetch - Trigger RSS fetch`);
   console.log(`• GET /api/products - Get all products`);
   console.log(`• GET /api/stats - Get statistics`);
+  console.log(`• GET /api/status - Get system status`);
   console.log(`• GET /api/health - Health check`);
+  console.log(`• GET /api/makers - Get makers [AUTH REQUIRED]`);
   console.log('=================================');
   
   // Log RSS categories
   const rssCategories = require('./config/rssCategories');
   console.log('RSS Categories configured:');
   rssCategories.forEach(category => console.log(`• ${category}`));
+  console.log('=================================');
+  
+  // Log authentication info
+  const authMethod = process.env.AUTH_METHOD || 'basic';
+  console.log('Authentication:');
+  console.log(`• Method: ${authMethod.toUpperCase()}`);
+  if (authMethod === 'basic') {
+    console.log(`• Username: ${process.env.ADMIN_USERNAME || 'admin'}`);
+    console.log(`• Password: ${process.env.ADMIN_PASSWORD ? '[SET]' : '[DEFAULT: admin123]'}`);
+  } else {
+    console.log(`• Token: ${process.env.ADMIN_TOKEN ? '[SET]' : '[DEFAULT: secure-admin-token-123]'}`);
+  }
   console.log('=================================');
 });
 

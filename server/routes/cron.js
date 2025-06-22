@@ -3,6 +3,8 @@ const router = express.Router();
 const rssService = require('../services/rssService');
 const dbService = require('../services/dbService');
 const linkedinEnrichmentService = require('../services/linkedinEnrichmentService');
+const scheduleService = require('../services/scheduleService');
+const cacheService = require('../services/cacheService');
 
 /**
  * POST /cron/fetch
@@ -11,10 +13,28 @@ const linkedinEnrichmentService = require('../services/linkedinEnrichmentService
  */
 router.post('/fetch', async (req, res) => {
   const startTime = Date.now();
+  const jobName = 'rss-fetch';
+  
   console.log('=== RSS Fetch Cron Job Started ===');
   console.log('Timestamp:', new Date().toISOString());
 
   try {
+    // Check if job should run based on schedule
+    const scheduleCheck = await scheduleService.shouldJobRun(jobName);
+    
+    if (!scheduleCheck.shouldRun) {
+      console.log(`Skipping RSS fetch: ${scheduleCheck.reason}`);
+      return res.json({
+        success: true,
+        skipped: true,
+        reason: scheduleCheck.reason,
+        schedule: scheduleCheck,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log(`RSS fetch allowed: ${scheduleCheck.reason}`);
+
     // Fetch all RSS feeds
     const rssResults = await rssService.fetchAllCategories();
     
@@ -49,6 +69,15 @@ router.post('/fetch', async (req, res) => {
     console.log(`RSS - Processed: ${rssResults.totalProcessed}, New: ${rssResults.totalNew}`);
     console.log(`LinkedIn - Processed: ${enrichmentResults.totalProcessed}, Successful: ${enrichmentResults.successfulEnrichments}`);
 
+    // Record the job run
+    const jobResults = {
+      rss: rssResults,
+      enrichment: enrichmentResults,
+      duration: `${duration}ms`
+    };
+    
+    await scheduleService.recordJobRun(jobName, jobResults);
+
     // Get updated database stats
     const stats = await dbService.getStats();
 
@@ -57,6 +86,7 @@ router.post('/fetch', async (req, res) => {
       success: true,
       timestamp: new Date().toISOString(),
       duration: `${duration}ms`,
+      schedule: scheduleCheck,
       results: {
         rss: {
           categories: rssResults.categories,
@@ -307,7 +337,7 @@ router.post('/enrich', async (req, res) => {
  */
 router.get('/enrich/status', async (req, res) => {
   try {
-    const cacheStats = linkedinEnrichmentService.getCacheStats();
+    const cacheStats = await linkedinEnrichmentService.getCacheStats();
     const dbStats = await dbService.getStats();
     
     res.json({
@@ -341,18 +371,150 @@ router.get('/enrich/status', async (req, res) => {
  * POST /cron/enrich/clear-cache
  * Clear the LinkedIn search cache
  */
-router.post('/enrich/clear-cache', (req, res) => {
+router.post('/enrich/clear-cache', async (req, res) => {
   try {
-    linkedinEnrichmentService.clearCache();
+    const results = await linkedinEnrichmentService.clearCache();
     
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
-      message: 'LinkedIn search cache cleared successfully'
+      message: 'LinkedIn search cache cleared successfully',
+      results: results
     });
 
   } catch (error) {
     console.error('Failed to clear cache:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      timestamp: new Date().toISOString(),
+      error: {
+        message: error.message,
+        type: error.name || 'UnknownError'
+      }
+    });
+  }
+});
+
+/**
+ * GET /cron/schedule/status
+ * Get schedule status for all jobs
+ */
+router.get('/schedule/status', async (req, res) => {
+  try {
+    const scheduleStatus = await scheduleService.getScheduleStatus();
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      schedule: scheduleStatus
+    });
+
+  } catch (error) {
+    console.error('Schedule status check failed:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      timestamp: new Date().toISOString(),
+      error: {
+        message: error.message,
+        type: error.name || 'UnknownError'
+      }
+    });
+  }
+});
+
+/**
+ * POST /cron/schedule/force/:jobName
+ * Force a job to be runnable by clearing its schedule
+ */
+router.post('/schedule/force/:jobName', async (req, res) => {
+  try {
+    const { jobName } = req.params;
+    const success = await scheduleService.forceJobRunnable(jobName);
+    
+    if (success) {
+      res.json({
+        success: true,
+        timestamp: new Date().toISOString(),
+        message: `Job ${jobName} has been forced runnable`,
+        jobName: jobName
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: {
+          message: `Failed to force job ${jobName} runnable`
+        }
+      });
+    }
+
+  } catch (error) {
+    console.error('Failed to force job runnable:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      timestamp: new Date().toISOString(),
+      error: {
+        message: error.message,
+        type: error.name || 'UnknownError'
+      }
+    });
+  }
+});
+
+/**
+ * POST /cron/cache/cleanup
+ * Clean up expired cache entries
+ */
+router.post('/cache/cleanup', async (req, res) => {
+  try {
+    const cacheResults = await cacheService.cleanupExpiredCache();
+    const scheduleResults = await scheduleService.cleanupOldSchedules();
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      message: 'Cache cleanup completed',
+      results: {
+        cache: cacheResults,
+        schedule: scheduleResults
+      }
+    });
+
+  } catch (error) {
+    console.error('Cache cleanup failed:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      timestamp: new Date().toISOString(),
+      error: {
+        message: error.message,
+        type: error.name || 'UnknownError'
+      }
+    });
+  }
+});
+
+/**
+ * GET /cron/cache/stats
+ * Get detailed cache statistics
+ */
+router.get('/cache/stats', async (req, res) => {
+  try {
+    const cacheStats = await cacheService.getCacheStats();
+    const scheduleStats = await scheduleService.getScheduleStatus();
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      cache: cacheStats,
+      schedule: scheduleStats
+    });
+
+  } catch (error) {
+    console.error('Cache stats failed:', error.message);
     
     res.status(500).json({
       success: false,

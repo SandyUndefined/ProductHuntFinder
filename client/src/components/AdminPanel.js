@@ -8,29 +8,107 @@ const AdminPanel = () => {
   const [message, setMessage] = useState(null);
   const [statusFilter, setStatusFilter] = useState('pending');
   const [processingIds, setProcessingIds] = useState(new Set());
+  
+  // Authentication state
+  const [authMethod, setAuthMethod] = useState('basic'); // 'basic' or 'token'
+  const [credentials, setCredentials] = useState({
+    username: '',
+    password: '',
+    token: ''
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
-    loadMakers();
+    // Load authentication method from server info
+    fetchAuthInfo();
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadMakers();
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     filterMakers();
   }, [makers, statusFilter]);
+
+  const fetchAuthInfo = async () => {
+    try {
+      const response = await fetch('/api/health');
+      if (response.ok) {
+        // Server is running, try to get auth method from root endpoint
+        const rootResponse = await fetch('/');
+        if (rootResponse.ok) {
+          const data = await rootResponse.json();
+          if (data.authentication?.method) {
+            setAuthMethod(data.authentication.method);
+          }
+        }
+      }
+    } catch (err) {
+      console.log('Could not fetch auth info, using default');
+    }
+  };
+
+  const getAuthHeaders = () => {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    if (authMethod === 'token' && credentials.token) {
+      headers['X-Auth-Token'] = credentials.token;
+    } else if (authMethod === 'basic' && credentials.username && credentials.password) {
+      const base64Credentials = btoa(`${credentials.username}:${credentials.password}`);
+      headers['Authorization'] = `Basic ${base64Credentials}`;
+    }
+
+    return headers;
+  };
+
+  const makeAuthenticatedRequest = async (url, options = {}) => {
+    const headers = getAuthHeaders();
+    
+    const requestOptions = {
+      ...options,
+      headers: {
+        ...headers,
+        ...options.headers
+      }
+    };
+
+    const response = await fetch(url, requestOptions);
+    
+    if (response.status === 401) {
+      setIsAuthenticated(false);
+      setAuthError('Authentication failed. Please check your credentials.');
+      throw new Error('Authentication required');
+    }
+    
+    return response;
+  };
 
   const loadMakers = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('/api/makers');
+      const response = await makeAuthenticatedRequest('/api/makers');
       const data = await response.json();
       
       if (data.success) {
         setMakers(data.makers);
+        setIsAuthenticated(true);
+        setAuthError(null);
       } else {
         setError(data.error?.message || 'Failed to load makers');
       }
     } catch (err) {
+      if (err.message === 'Authentication required') {
+        // Auth error is already handled
+        return;
+      }
       setError('Failed to connect to server');
       console.error('Error loading makers:', err);
     } finally {
@@ -55,11 +133,8 @@ const AdminPanel = () => {
       setProcessingIds(prev => new Set(prev).add(makerId));
       setError(null);
 
-      const response = await fetch(`/api/makers/${makerId}/approve`, {
+      const response = await makeAuthenticatedRequest(`/api/makers/${makerId}/approve`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
       });
 
       const data = await response.json();
@@ -101,11 +176,8 @@ const AdminPanel = () => {
       setProcessingIds(prev => new Set(prev).add(makerId));
       setError(null);
 
-      const response = await fetch(`/api/makers/${makerId}/reject`, {
+      const response = await makeAuthenticatedRequest(`/api/makers/${makerId}/reject`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
       });
 
       const data = await response.json();
@@ -155,16 +227,149 @@ const AdminPanel = () => {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError(null);
+    
+    try {
+      setLoading(true);
+      await loadMakers(); // This will test authentication
+    } catch (err) {
+      // Error handling is done in loadMakers
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setCredentials({ username: '', password: '', token: '' });
+    setMakers([]);
+    setAuthError(null);
+  };
+
   const clearMessage = () => {
     setMessage(null);
     setError(null);
   };
+
+  // Show login form if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="admin-panel">
+        <div className="admin-header">
+          <h1>🔐 Admin Login</h1>
+          <p>Please authenticate to access the admin panel</p>
+        </div>
+
+        <div className="login-container">
+          <form onSubmit={handleLogin} className="login-form">
+            <div className="auth-method-selector">
+              <label>
+                <input
+                  type="radio"
+                  value="basic"
+                  checked={authMethod === 'basic'}
+                  onChange={(e) => setAuthMethod(e.target.value)}
+                />
+                Username & Password
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  value="token"
+                  checked={authMethod === 'token'}
+                  onChange={(e) => setAuthMethod(e.target.value)}
+                />
+                Access Token
+              </label>
+            </div>
+
+            {authMethod === 'basic' ? (
+              <>
+                <div className="form-group">
+                  <label htmlFor="username">Username:</label>
+                  <input
+                    type="text"
+                    id="username"
+                    value={credentials.username}
+                    onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
+                    required
+                    placeholder="Enter admin username"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="password">Password:</label>
+                  <input
+                    type="password"
+                    id="password"
+                    value={credentials.password}
+                    onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
+                    required
+                    placeholder="Enter admin password"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="form-group">
+                <label htmlFor="token">Access Token:</label>
+                <input
+                  type="password"
+                  id="token"
+                  value={credentials.token}
+                  onChange={(e) => setCredentials(prev => ({ ...prev, token: e.target.value }))}
+                  required
+                  placeholder="Enter access token"
+                />
+              </div>
+            )}
+
+            {authError && (
+              <div className="error">
+                <strong>Authentication Error:</strong> {authError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary login-btn"
+            >
+              {loading ? (
+                <>
+                  <span className="loading-spinner"></span>
+                  Authenticating...
+                </>
+              ) : (
+                'Login'
+              )}
+            </button>
+          </form>
+
+          <div className="login-help">
+            <h3>Authentication Help</h3>
+            <p>Default credentials for development:</p>
+            <ul>
+              <li><strong>Username:</strong> admin</li>
+              <li><strong>Password:</strong> admin123</li>
+              <li><strong>Token:</strong> secure-admin-token-123</li>
+            </ul>
+            <p><em>In production, these should be changed via environment variables.</em></p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-panel">
       <div className="admin-header">
         <h1>🛠️ Admin Panel</h1>
         <p>Review and approve or reject enriched makers from Product Hunt listings</p>
+        <div className="auth-info">
+          <span>Authenticated via {authMethod.toUpperCase()}</span>
+          <button onClick={handleLogout} className="btn-secondary logout-btn">
+            Logout
+          </button>
+        </div>
       </div>
 
       {/* Controls */}

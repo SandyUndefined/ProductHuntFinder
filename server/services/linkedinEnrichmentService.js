@@ -1,11 +1,11 @@
 const { GoogleSearchResults } = require('google-search-results-nodejs');
 const https = require('https');
 const dbService = require('./dbService');
+const cacheService = require('./cacheService');
 
 class LinkedInEnrichmentService {
   constructor() {
     this.serpApiKey = process.env.SERPAPI_API_KEY;
-    this.searchCache = new Map(); // In-memory cache for maker searches
     this.maxRetries = 3;
     this.retryDelay = 1000; // 1 second
   }
@@ -52,6 +52,12 @@ class LinkedInEnrichmentService {
             results.failedEnrichments++;
           }
 
+          // Check if this was a cache hit
+          const cachedResult = await cacheService.getLinkedInCache(product.makerName);
+          if (cachedResult !== null && cachedResult === linkedinUrl) {
+            results.cacheHits++;
+          }
+
           // Add delay between requests to be respectful
           await this.delay(500);
 
@@ -95,12 +101,10 @@ class LinkedInEnrichmentService {
       return null;
     }
 
-    const cleanMakerName = this.cleanMakerName(makerName);
-    
-    // Check cache first
-    if (this.searchCache.has(cleanMakerName)) {
-      console.log(`Cache hit for: ${cleanMakerName}`);
-      return this.searchCache.get(cleanMakerName);
+    // Check cache first using the new cache service
+    const cachedResult = await cacheService.getLinkedInCache(makerName);
+    if (cachedResult !== null) {
+      return cachedResult;
     }
 
     try {
@@ -108,15 +112,15 @@ class LinkedInEnrichmentService {
 
       // Try SerpAPI first if available
       if (this.serpApiKey) {
-        linkedinUrl = await this.searchWithSerpAPI(cleanMakerName);
+        linkedinUrl = await this.searchWithSerpAPI(makerName);
       } else {
         // Fallback to simple search (limited functionality)
         console.log('No SerpAPI key found, using fallback search method');
-        linkedinUrl = await this.searchWithFallback(cleanMakerName);
+        linkedinUrl = await this.searchWithFallback(makerName);
       }
 
-      // Cache the result (even if null to avoid repeated searches)
-      this.searchCache.set(cleanMakerName, linkedinUrl);
+      // Cache the result using the new cache service
+      await cacheService.setLinkedInCache(makerName, linkedinUrl);
       
       return linkedinUrl;
 
@@ -124,19 +128,20 @@ class LinkedInEnrichmentService {
       console.error(`Error searching for LinkedIn profile of ${makerName}:`, error.message);
       
       // Cache null result to avoid repeated failed searches
-      this.searchCache.set(cleanMakerName, null);
+      await cacheService.setLinkedInCache(makerName, null);
       return null;
     }
   }
 
   /**
    * Search using SerpAPI
-   * @param {string} makerName - Cleaned maker name
+   * @param {string} makerName - Maker name
    * @returns {Promise<string|null>} - LinkedIn profile URL or null
    */
   async searchWithSerpAPI(makerName) {
     const search = new GoogleSearchResults(this.serpApiKey);
-    const searchQuery = `"${makerName}" site:linkedin.com/in`;
+    const cleanMakerName = this.cleanMakerName(makerName);
+    const searchQuery = `"${cleanMakerName}" site:linkedin.com/in`;
 
     console.log(`SerpAPI search: ${searchQuery}`);
 
@@ -175,13 +180,14 @@ class LinkedInEnrichmentService {
 
   /**
    * Fallback search method (limited functionality)
-   * @param {string} makerName - Cleaned maker name
+   * @param {string} makerName - Maker name
    * @returns {Promise<string|null>} - LinkedIn profile URL or null
    */
   async searchWithFallback(makerName) {
+    const cleanMakerName = this.cleanMakerName(makerName);
     // This is a very basic fallback - in production, you might want to use
     // other search APIs or scraping methods
-    console.log(`Fallback search for: ${makerName}`);
+    console.log(`Fallback search for: ${cleanMakerName}`);
     
     // For now, just return null as we can't effectively search without proper API
     // In a real implementation, you might use other search APIs or methods
@@ -272,20 +278,18 @@ class LinkedInEnrichmentService {
   /**
    * Clear the search cache
    */
-  clearCache() {
-    this.searchCache.clear();
-    console.log('LinkedIn search cache cleared');
+  async clearCache() {
+    const results = await cacheService.clearLinkedInCache();
+    console.log('LinkedIn search cache cleared:', results);
+    return results;
   }
 
   /**
    * Get cache statistics
-   * @returns {Object} - Cache statistics
+   * @returns {Promise<Object>} - Cache statistics
    */
-  getCacheStats() {
-    return {
-      cacheSize: this.searchCache.size,
-      cachedNames: Array.from(this.searchCache.keys())
-    };
+  async getCacheStats() {
+    return await cacheService.getCacheStats();
   }
 }
 

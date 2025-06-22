@@ -25,7 +25,10 @@ class DatabaseService {
           metadata: {
             lastUpdated: null,
             totalCount: 0
-          }
+          },
+          cache: {},
+          schedule: {},
+          misc: {}
         }, null, 2));
       }
     } catch (error) {
@@ -36,13 +39,23 @@ class DatabaseService {
   async readLocalData() {
     try {
       const data = await fs.readFile(this.dbPath, 'utf8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      
+      // Ensure all required sections exist
+      if (!parsed.cache) parsed.cache = {};
+      if (!parsed.schedule) parsed.schedule = {};
+      if (!parsed.misc) parsed.misc = {};
+      
+      return parsed;
     } catch (error) {
       console.error('Error reading local data:', error);
       return { 
         products: {}, 
         productList: [],
-        metadata: { lastUpdated: null, totalCount: 0 } 
+        metadata: { lastUpdated: null, totalCount: 0 },
+        cache: {},
+        schedule: {},
+        misc: {}
       };
     }
   }
@@ -58,6 +71,12 @@ class DatabaseService {
   async getItem(key) {
     try {
       const data = await this.readLocalData();
+      
+      // Initialize additional data structures if they don't exist
+      if (!data.cache) data.cache = {};
+      if (!data.schedule) data.schedule = {};
+      if (!data.misc) data.misc = {};
+      
       if (key === 'product:list') {
         return data.productList;
       } else if (key.startsWith('product:')) {
@@ -65,8 +84,14 @@ class DatabaseService {
         return data.products[productId] || null;
       } else if (key === 'metadata') {
         return data.metadata;
+      } else if (key.startsWith('linkedin_cache:')) {
+        return data.cache[key] || null;
+      } else if (key.startsWith('schedule:')) {
+        return data.schedule[key] || null;
+      } else {
+        // Generic key storage
+        return data.misc[key] || null;
       }
-      return null;
     } catch (error) {
       console.error(`Error getting item ${key}:`, error);
       return null;
@@ -77,6 +102,11 @@ class DatabaseService {
     try {
       const data = await this.readLocalData();
       
+      // Initialize additional data structures if they don't exist
+      if (!data.cache) data.cache = {};
+      if (!data.schedule) data.schedule = {};
+      if (!data.misc) data.misc = {};
+      
       if (key === 'product:list') {
         data.productList = value;
       } else if (key.startsWith('product:')) {
@@ -86,6 +116,13 @@ class DatabaseService {
         data.metadata.lastUpdated = new Date().toISOString();
       } else if (key === 'metadata') {
         data.metadata = value;
+      } else if (key.startsWith('linkedin_cache:')) {
+        data.cache[key] = value;
+      } else if (key.startsWith('schedule:')) {
+        data.schedule[key] = value;
+      } else {
+        // Generic key storage
+        data.misc[key] = value;
       }
       
       await this.writeLocalData(data);
@@ -405,6 +442,106 @@ class DatabaseService {
       console.error('Error getting stats:', error);
       return { totalProducts: 0, byCategory: {}, byStatus: {} };
     }
+  }
+
+  /**
+   * Delete an item from the database
+   * @param {string} key - Key to delete
+   * @returns {Promise<boolean>} - Success status
+   */
+  async deleteItem(key) {
+    try {
+      const data = await this.readLocalData();
+      
+      if (key === 'product:list') {
+        data.productList = [];
+      } else if (key.startsWith('product:')) {
+        const productId = key.replace('product:', '');
+        if (data.products[productId]) {
+          delete data.products[productId];
+          // Remove from product list
+          const index = data.productList.indexOf(productId);
+          if (index > -1) {
+            data.productList.splice(index, 1);
+          }
+        }
+      } else if (key.startsWith('linkedin_cache:')) {
+        if (data.cache[key]) {
+          delete data.cache[key];
+        }
+      } else if (key.startsWith('schedule:')) {
+        if (data.schedule[key]) {
+          delete data.schedule[key];
+        }
+      } else {
+        if (data.misc[key]) {
+          delete data.misc[key];
+        }
+      }
+      
+      await this.writeLocalData(data);
+      return true;
+    } catch (error) {
+      console.error(`Error deleting item ${key}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Get all keys matching a pattern
+   * @param {string} pattern - Pattern to match (supports * wildcard)
+   * @returns {Promise<Array>} - Array of matching keys
+   */
+  async getKeysByPattern(pattern) {
+    try {
+      const data = await this.readLocalData();
+      const keys = [];
+      
+      // Handle different key types
+      if (pattern.startsWith('product:')) {
+        if (pattern === 'product:*') {
+          data.productList.forEach(id => keys.push(`product:${id}`));
+        }
+      } else if (pattern.startsWith('linkedin_cache:')) {
+        Object.keys(data.cache).forEach(key => {
+          if (this.matchPattern(key, pattern)) {
+            keys.push(key);
+          }
+        });
+      } else if (pattern.startsWith('schedule:')) {
+        Object.keys(data.schedule).forEach(key => {
+          if (this.matchPattern(key, pattern)) {
+            keys.push(key);
+          }
+        });
+      } else {
+        Object.keys(data.misc).forEach(key => {
+          if (this.matchPattern(key, pattern)) {
+            keys.push(key);
+          }
+        });
+      }
+      
+      return keys;
+    } catch (error) {
+      console.error(`Error getting keys by pattern ${pattern}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Simple pattern matching with * wildcard
+   * @param {string} key - Key to test
+   * @param {string} pattern - Pattern with * wildcard
+   * @returns {boolean} - Whether key matches pattern
+   */
+  matchPattern(key, pattern) {
+    if (!pattern.includes('*')) {
+      return key === pattern;
+    }
+    
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    return regex.test(key);
   }
 }
 
