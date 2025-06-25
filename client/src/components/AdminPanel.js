@@ -9,6 +9,8 @@ const AdminPanel = () => {
   const [statusFilter, setStatusFilter] = useState('pending');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [processingIds, setProcessingIds] = useState(new Set());
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
   
   // Authentication state
   const [authMethod, setAuthMethod] = useState('basic'); // 'basic' or 'token'
@@ -209,6 +211,134 @@ const AdminPanel = () => {
         newSet.delete(makerId);
         return newSet;
       });
+    }
+  };
+
+  // Bulk selection functions
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      const allIds = new Set(filteredMakers.map(maker => maker.id));
+      setSelectedIds(allIds);
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectItem = (makerId, checked) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(makerId);
+      } else {
+        newSet.delete(makerId);
+      }
+      return newSet;
+    });
+  };
+
+  // Bulk approve function
+  const handleBulkApprove = async () => {
+    if (selectedIds.size === 0 || bulkProcessing) return;
+
+    try {
+      setBulkProcessing(true);
+      setError(null);
+
+      const selectedArray = Array.from(selectedIds);
+      const results = [];
+      
+      for (const makerId of selectedArray) {
+        try {
+          const response = await makeAuthenticatedRequest(`/api/makers/${makerId}/approve`, {
+            method: 'POST',
+          });
+          const data = await response.json();
+          results.push({ id: makerId, success: data.success });
+        } catch (err) {
+          results.push({ id: makerId, success: false });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+
+      // Update local state for successful approvals
+      setMakers(prev => prev.map(maker => {
+        const result = results.find(r => r.id === maker.id);
+        if (result && result.success) {
+          return { ...maker, status: 'approved', updatedAt: new Date().toISOString() };
+        }
+        return maker;
+      }));
+
+      setMessage({
+        type: 'success',
+        text: `Bulk approve completed: ${successCount} approved${failureCount > 0 ? `, ${failureCount} failed` : ''}`
+      });
+
+      // Clear selections
+      setSelectedIds(new Set());
+      
+      // Clear message after 5 seconds
+      setTimeout(() => setMessage(null), 5000);
+    } catch (err) {
+      setError('Failed to perform bulk approve');
+      console.error('Error in bulk approve:', err);
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  // Bulk reject function
+  const handleBulkReject = async () => {
+    if (selectedIds.size === 0 || bulkProcessing) return;
+
+    try {
+      setBulkProcessing(true);
+      setError(null);
+
+      const selectedArray = Array.from(selectedIds);
+      const results = [];
+      
+      for (const makerId of selectedArray) {
+        try {
+          const response = await makeAuthenticatedRequest(`/api/makers/${makerId}/reject`, {
+            method: 'POST',
+          });
+          const data = await response.json();
+          results.push({ id: makerId, success: data.success });
+        } catch (err) {
+          results.push({ id: makerId, success: false });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+
+      // Update local state for successful rejections
+      setMakers(prev => prev.map(maker => {
+        const result = results.find(r => r.id === maker.id);
+        if (result && result.success) {
+          return { ...maker, status: 'rejected', updatedAt: new Date().toISOString() };
+        }
+        return maker;
+      }));
+
+      setMessage({
+        type: 'success',
+        text: `Bulk reject completed: ${successCount} rejected${failureCount > 0 ? `, ${failureCount} failed` : ''}`
+      });
+
+      // Clear selections
+      setSelectedIds(new Set());
+      
+      // Clear message after 5 seconds
+      setTimeout(() => setMessage(null), 5000);
+    } catch (err) {
+      setError('Failed to perform bulk reject');
+      console.error('Error in bulk reject:', err);
+    } finally {
+      setBulkProcessing(false);
     }
   };
 
@@ -441,25 +571,57 @@ const AdminPanel = () => {
               </div>
             </div>
 
-            <button
-              onClick={loadMakers}
-              disabled={loading}
-              className="btn-secondary"
-            >
-              {loading ? (
-                <>
-                  <div className="loading-spinner"></div>
-                  Refreshing...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Refresh
-                </>
+            <div className="flex items-center space-x-3">
+              {statusFilter === 'pending' && selectedIds.size > 0 && (
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600">{selectedIds.size} selected</span>
+                  <button
+                    onClick={handleBulkApprove}
+                    disabled={bulkProcessing}
+                    className="btn-approve"
+                  >
+                    {bulkProcessing ? (
+                      <div className="loading-spinner"></div>
+                    ) : (
+                      <span>✅</span>
+                    )}
+                    Bulk Approve
+                  </button>
+                  <button
+                    onClick={handleBulkReject}
+                    disabled={bulkProcessing}
+                    className="btn-reject"
+                  >
+                    {bulkProcessing ? (
+                      <div className="loading-spinner"></div>
+                    ) : (
+                      <span>❌</span>
+                    )}
+                    Bulk Reject
+                  </button>
+                </div>
               )}
-            </button>
+              
+              <button
+                onClick={loadMakers}
+                disabled={loading}
+                className="btn-secondary"
+              >
+                {loading ? (
+                  <>
+                    <div className="loading-spinner"></div>
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -507,6 +669,16 @@ const AdminPanel = () => {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
+                        {statusFilter === 'pending' && (
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <input
+                              type="checkbox"
+                              checked={filteredMakers.length > 0 && selectedIds.size === filteredMakers.length}
+                              onChange={(e) => handleSelectAll(e.target.checked)}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                          </th>
+                        )}
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Published</th>
@@ -522,6 +694,16 @@ const AdminPanel = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {filteredMakers.map(maker => (
                         <tr key={maker.id} className="hover:bg-gray-50 transition-colors duration-150">
+                          {statusFilter === 'pending' && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(maker.id)}
+                                onChange={(e) => handleSelectItem(maker.id, e.target.checked)}
+                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                            </td>
+                          )}
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="font-semibold text-gray-900">{maker.name}</div>
                           </td>
@@ -613,10 +795,20 @@ const AdminPanel = () => {
                   {filteredMakers.map(maker => (
                     <div key={maker.id} className="p-6 space-y-4">
                       <div className="flex justify-between items-start">
-                        <h3 className="font-semibold text-gray-900 text-lg">{maker.name}</h3>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-primary-500 to-secondary-500 text-white">
-                          {maker.category.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </span>
+                        {statusFilter === 'pending' && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(maker.id)}
+                            onChange={(e) => handleSelectItem(maker.id, e.target.checked)}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 mt-1"
+                          />
+                        )}
+                        <div className="flex-1 ml-3">
+                          <h3 className="font-semibold text-gray-900 text-lg">{maker.name}</h3>
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-primary-500 to-secondary-500 text-white">
+                            {maker.category.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </span>
+                        </div>
                       </div>
                       
                       <p className="text-gray-600 text-sm">{truncateText(maker.description)}</p>
