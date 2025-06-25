@@ -1,3 +1,4 @@
+# Replit configuration
 run = "npm run replit:start"
 entrypoint = "server/app.js"
 
