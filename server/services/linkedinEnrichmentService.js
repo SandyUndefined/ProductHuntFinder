@@ -1,4 +1,4 @@
-const GoogleSearchResults = require('google-search-results-nodejs');
+const { GoogleSearch } = require('google-search-results-nodejs');
 const https = require('https');
 const dbService = require('./dbService');
 const cacheService = require('./cacheService');
@@ -140,19 +140,19 @@ class LinkedInEnrichmentService {
    */
   async searchWithSerpAPI(makerName) {
     try {
-      // Debug: Check if GoogleSearchResults is properly imported
-      console.log('DEBUG: GoogleSearchResults type:', typeof GoogleSearchResults);
+      // Debug: Check if GoogleSearch is properly imported
+      console.log('DEBUG: GoogleSearch type:', typeof GoogleSearch);
       console.log('DEBUG: SerpAPI key available:', !!this.serpApiKey);
       
-      if (!GoogleSearchResults) {
-        throw new Error('GoogleSearchResults is not properly imported');
+      if (!GoogleSearch) {
+        throw new Error('GoogleSearch is not properly imported');
       }
       
-      if (typeof GoogleSearchResults !== 'function') {
-        throw new Error(`GoogleSearchResults is not a constructor. Type: ${typeof GoogleSearchResults}`);
+      if (typeof GoogleSearch !== 'function') {
+        throw new Error(`GoogleSearch is not a constructor. Type: ${typeof GoogleSearch}`);
       }
 
-      const search = new GoogleSearchResults(this.serpApiKey);
+      const search = new GoogleSearch(this.serpApiKey);
       const cleanMakerName = this.cleanMakerName(makerName);
       const searchQuery = `"${cleanMakerName}" site:linkedin.com/in`;
 
