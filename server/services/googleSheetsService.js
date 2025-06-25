@@ -260,7 +260,8 @@ class GoogleSheetsService {
       if (!this.initialized) {
         const success = await this.initialize();
         if (!success) {
-          throw new Error('Google Sheets service not available');
+          console.log('Google Sheets service not available, skipping sync');
+          return false; // Return false instead of throwing error
         }
       }
 

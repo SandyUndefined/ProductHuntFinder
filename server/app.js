@@ -255,10 +255,15 @@ app.post('/api/makers/:id/approve', logAuthAttempt, auth, async (req, res) => {
     let sheetsResult = { synced: false, error: null };
     
     try {
-      await googleSheetsService.addApprovedMaker(product);
-      await dbService.updateProductSheetsSyncStatus(id, true);
-      sheetsResult.synced = true;
-      console.log(`Successfully synced approved maker to Google Sheets: ${product.name}`);
+      const syncSuccess = await googleSheetsService.addApprovedMaker(product);
+      if (syncSuccess) {
+        await dbService.updateProductSheetsSyncStatus(id, true);
+        sheetsResult.synced = true;
+        console.log(`Successfully synced approved maker to Google Sheets: ${product.name}`);
+      } else {
+        sheetsResult.error = 'Google Sheets service not available';
+        console.log('Google Sheets service not available, approval completed without sync');
+      }
     } catch (sheetsError) {
       console.error('Failed to sync to Google Sheets:', sheetsError.message);
       sheetsResult.error = sheetsError.message;
@@ -333,17 +338,29 @@ app.post('/api/cron/resync-sheets', logAuthAttempt, auth, async (req, res) => {
 
     for (const product of needingSyncProducts) {
       try {
-        await googleSheetsService.addApprovedMaker(product);
-        await dbService.updateProductSheetsSyncStatus(product.id, true);
-        
-        results.push({
-          productId: product.id,
-          productName: product.name,
-          success: true
-        });
-        successCount++;
-        
-        console.log(`Successfully synced to Google Sheets: ${product.name}`);
+        const syncSuccess = await googleSheetsService.addApprovedMaker(product);
+        if (syncSuccess) {
+          await dbService.updateProductSheetsSyncStatus(product.id, true);
+          
+          results.push({
+            productId: product.id,
+            productName: product.name,
+            success: true
+          });
+          successCount++;
+          
+          console.log(`Successfully synced to Google Sheets: ${product.name}`);
+        } else {
+          results.push({
+            productId: product.id,
+            productName: product.name,
+            success: false,
+            error: 'Google Sheets service not available'
+          });
+          failureCount++;
+          
+          console.log(`Google Sheets service not available for: ${product.name}`);
+        }
       } catch (error) {
         results.push({
           productId: product.id,
