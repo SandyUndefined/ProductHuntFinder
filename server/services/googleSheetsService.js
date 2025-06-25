@@ -19,9 +19,18 @@ class GoogleSheetsService {
         return true;
       }
 
+      console.log('=== Google Sheets Service Initialization ===');
+      console.log('DEBUG: Environment variables check:');
+      console.log('- GOOGLE_SHEETS_ID:', !!process.env.GOOGLE_SHEETS_ID);
+      console.log('- GOOGLE_SERVICE_ACCOUNT_EMAIL:', !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
+      console.log('- GOOGLE_PRIVATE_KEY:', !!process.env.GOOGLE_PRIVATE_KEY);
+      console.log('- GOOGLE_PROJECT_ID:', !!process.env.GOOGLE_PROJECT_ID);
+      console.log('- GOOGLE_SERVICE_ACCOUNT_KEY:', !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+
       // Check if we have the required environment variables
       if (!this.spreadsheetId) {
         console.warn('Google Sheets integration disabled: GOOGLE_SHEETS_ID not configured');
+        console.warn('Please set GOOGLE_SHEETS_ID in your environment variables');
         return false;
       }
 
@@ -31,10 +40,13 @@ class GoogleSheetsService {
       try {
         const credentialsPath = path.join(process.cwd(), 'google-credentials.json');
         credentials = require(credentialsPath);
-        console.log('Using Google credentials from file');
+        console.log('✓ Using Google credentials from file: google-credentials.json');
       } catch (fileError) {
+        console.log('✗ google-credentials.json not found, trying environment variables...');
+        
         // Try to load from environment variables (for Replit/production)
         try {
+          // Method 1: Individual environment variables
           if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
             credentials = {
               type: 'service_account',
@@ -42,15 +54,37 @@ class GoogleSheetsService {
               private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
               project_id: process.env.GOOGLE_PROJECT_ID || 'product-hunt-finder'
             };
-            console.log('Using Google credentials from environment variables');
+            console.log('✓ Using Google credentials from individual environment variables');
+          }
+          // Method 2: JSON string in environment variable
+          else if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+            try {
+              credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+              console.log('✓ Using Google credentials from GOOGLE_SERVICE_ACCOUNT_KEY');
+            } catch (parseError) {
+              throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON');
+            }
           } else {
-            throw new Error('No Google credentials found in environment');
+            throw new Error('No Google credentials found in environment variables');
           }
         } catch (envError) {
-          console.warn('Google Sheets integration disabled: No valid credentials found');
-          console.warn('Please set up google-credentials.json or environment variables');
+          console.error('✗ Google Sheets integration disabled: No valid credentials found');
+          console.error('Please set up one of the following:');
+          console.error('1. Create google-credentials.json file in project root');
+          console.error('2. Set individual environment variables:');
+          console.error('   - GOOGLE_SERVICE_ACCOUNT_EMAIL');
+          console.error('   - GOOGLE_PRIVATE_KEY');
+          console.error('   - GOOGLE_PROJECT_ID (optional)');
+          console.error('3. Set GOOGLE_SERVICE_ACCOUNT_KEY with full JSON credentials');
+          console.error('Error details:', envError.message);
           return false;
         }
+      }
+
+      // Validate credentials structure
+      if (!credentials.client_email || !credentials.private_key) {
+        console.error('✗ Invalid credentials: missing client_email or private_key');
+        return false;
       }
 
       // Create auth client
@@ -66,10 +100,11 @@ class GoogleSheetsService {
       await this.testConnection();
       
       this.initialized = true;
-      console.log('Google Sheets service initialized successfully');
+      console.log('✓ Google Sheets service initialized successfully');
       return true;
     } catch (error) {
-      console.error('Failed to initialize Google Sheets service:', error.message);
+      console.error('✗ Failed to initialize Google Sheets service:', error.message);
+      console.error('Stack trace:', error.stack);
       return false;
     }
   }

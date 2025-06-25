@@ -1,4 +1,4 @@
-const { GoogleSearchResults } = require('google-search-results-nodejs');
+const GoogleSearchResults = require('google-search-results-nodejs');
 const https = require('https');
 const dbService = require('./dbService');
 const cacheService = require('./cacheService');
@@ -139,43 +139,61 @@ class LinkedInEnrichmentService {
    * @returns {Promise<string|null>} - LinkedIn profile URL or null
    */
   async searchWithSerpAPI(makerName) {
-    const search = new GoogleSearchResults(this.serpApiKey);
-    const cleanMakerName = this.cleanMakerName(makerName);
-    const searchQuery = `"${cleanMakerName}" site:linkedin.com/in`;
+    try {
+      // Debug: Check if GoogleSearchResults is properly imported
+      console.log('DEBUG: GoogleSearchResults type:', typeof GoogleSearchResults);
+      console.log('DEBUG: SerpAPI key available:', !!this.serpApiKey);
+      
+      if (!GoogleSearchResults) {
+        throw new Error('GoogleSearchResults is not properly imported');
+      }
+      
+      if (typeof GoogleSearchResults !== 'function') {
+        throw new Error(`GoogleSearchResults is not a constructor. Type: ${typeof GoogleSearchResults}`);
+      }
 
-    console.log(`SerpAPI search: ${searchQuery}`);
+      const search = new GoogleSearchResults(this.serpApiKey);
+      const cleanMakerName = this.cleanMakerName(makerName);
+      const searchQuery = `"${cleanMakerName}" site:linkedin.com/in`;
 
-    return new Promise((resolve, reject) => {
-      search.json({
-        q: searchQuery,
-        num: 5, // Get top 5 results
-        safe: 'active'
-      }, (result) => {
-        try {
-          if (result.error) {
-            console.error('SerpAPI error:', result.error);
-            return resolve(null);
+      console.log(`SerpAPI search: ${searchQuery}`);
+
+      return new Promise((resolve, reject) => {
+        search.json({
+          q: searchQuery,
+          num: 5, // Get top 5 results
+          safe: 'active'
+        }, (result) => {
+          try {
+            if (result.error) {
+              console.error('SerpAPI error:', result.error);
+              return resolve(null);
+            }
+
+            const organicResults = result.organic_results || [];
+            
+            // Find the best LinkedIn profile match
+            const linkedinProfile = this.findBestLinkedInMatch(organicResults, makerName);
+            
+            if (linkedinProfile) {
+              console.log(`Found LinkedIn profile: ${linkedinProfile}`);
+            } else {
+              console.log(`No LinkedIn profile found for: ${makerName}`);
+            }
+
+            resolve(linkedinProfile);
+
+          } catch (error) {
+            console.error('Error processing SerpAPI results:', error.message);
+            resolve(null);
           }
-
-          const organicResults = result.organic_results || [];
-          
-          // Find the best LinkedIn profile match
-          const linkedinProfile = this.findBestLinkedInMatch(organicResults, makerName);
-          
-          if (linkedinProfile) {
-            console.log(`Found LinkedIn profile: ${linkedinProfile}`);
-          } else {
-            console.log(`No LinkedIn profile found for: ${makerName}`);
-          }
-
-          resolve(linkedinProfile);
-
-        } catch (error) {
-          console.error('Error processing SerpAPI results:', error.message);
-          resolve(null);
-        }
+        });
       });
-    });
+    } catch (error) {
+      console.error(`Error in searchWithSerpAPI for ${makerName}:`, error.message);
+      console.error('Stack trace:', error.stack);
+      return null;
+    }
   }
 
   /**

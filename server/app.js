@@ -531,8 +531,50 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+// Startup validation and debugging
+async function validateStartup() {
+  console.log('=== STARTUP VALIDATION ===');
+  
+  // Check critical dependencies
+  console.log('Checking dependencies...');
+  try {
+    const GoogleSearchResults = require('google-search-results-nodejs');
+    console.log('✓ google-search-results-nodejs:', typeof GoogleSearchResults);
+    
+    const { google } = require('googleapis');
+    console.log('✓ googleapis:', typeof google);
+  } catch (error) {
+    console.error('✗ Dependency check failed:', error.message);
+  }
+  
+  // Check environment variables
+  console.log('\nEnvironment Variables:');
+  console.log('• NODE_ENV:', process.env.NODE_ENV || 'development');
+  console.log('• PORT:', process.env.PORT || '5000');
+  console.log('• SERPAPI_API_KEY:', !!process.env.SERPAPI_API_KEY ? '[SET]' : '[NOT SET]');
+  console.log('• GOOGLE_SHEETS_ID:', !!process.env.GOOGLE_SHEETS_ID ? '[SET]' : '[NOT SET]');
+  console.log('• GOOGLE_SERVICE_ACCOUNT_EMAIL:', !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ? '[SET]' : '[NOT SET]');
+  console.log('• GOOGLE_PRIVATE_KEY:', !!process.env.GOOGLE_PRIVATE_KEY ? '[SET]' : '[NOT SET]');
+  console.log('• GOOGLE_SERVICE_ACCOUNT_KEY:', !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY ? '[SET]' : '[NOT SET]');
+  
+  // Test Google Sheets service
+  console.log('\nTesting Google Sheets service...');
+  try {
+    const sheetsStatus = await googleSheetsService.getSyncStatus();
+    if (sheetsStatus.available) {
+      console.log('✓ Google Sheets service: Available');
+    } else {
+      console.log('✗ Google Sheets service: Not available -', sheetsStatus.error);
+    }
+  } catch (error) {
+    console.log('✗ Google Sheets service: Error -', error.message);
+  }
+  
+  console.log('=== STARTUP VALIDATION COMPLETE ===\n');
+}
+
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log('=================================');
   console.log('🚀 Product Hunt Finder Server');
   console.log('=================================');
@@ -540,6 +582,10 @@ app.listen(PORT, () => {
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`URL: http://localhost:${PORT}`);
   console.log('=================================');
+  
+  // Run startup validation
+  await validateStartup();
+  
   console.log('Available endpoints:');
   console.log(`• POST /api/cron/fetch - Trigger RSS fetch`);
   console.log(`• GET /api/products - Get all products`);
