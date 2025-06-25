@@ -5,8 +5,10 @@
   "main": "server/app.js",
   "scripts": {
     "dev": "nodemon server/app.js",
-    "build": "vite build && esbuild server/app.js --platform=node --packages=external --bundle --format=cjs --outdir=dist",
-    "start": "NODE_ENV=production node dist/app.js",
+    "build": "cd client && npm run build && cd ..",
+    "start": "NODE_ENV=production node server/app.js",
+    "install-client": "cd client && npm install",
+    "postinstall": "npm run install-client",
     "check": "tsc",
     "db:push": "drizzle-kit push"
   },
