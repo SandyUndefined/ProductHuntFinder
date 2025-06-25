@@ -17,7 +17,7 @@ const cacheService = require('./services/cacheService');
 const { auth, logAuthAttempt } = require('./middleware/auth');
 
 const app = express();
-const PORT = process.env.PORT || (process.env.NODE_ENV === 'production' ? 3000 : 3001);
+const PORT = process.env.PORT || 5000;
 
 // Security middleware
 app.use(helmet({
@@ -29,7 +29,7 @@ app.use(helmet({
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? process.env.FRONTEND_URL || true 
-    : ['http://localhost:5173', 'http://localhost:3001'],
+    : ['http://localhost:5173', 'http://localhost:5000'],
   credentials: true
 }));
 
@@ -42,6 +42,13 @@ app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
+
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+  app.use(express.static(clientBuildPath));
+  console.log(`Serving static files from: ${clientBuildPath}`);
+}
 
 // API Routes
 app.use('/api/cron', cronRoutes);
@@ -515,6 +522,14 @@ app.use('/api/*', (req, res) => {
     }
   });
 });
+
+// Serve React app for all non-API routes in production
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+}
 
 // Start server
 app.listen(PORT, () => {
