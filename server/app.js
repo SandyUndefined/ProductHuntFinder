@@ -591,7 +591,7 @@ async function validateStartup() {
 }
 
 // Start server
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log('=================================');
   console.log('🚀 Product Hunt Finder Server');
   console.log('=================================');
