@@ -76,6 +76,8 @@ class GoogleSheetsService {
           console.error('   - GOOGLE_PRIVATE_KEY');
           console.error('   - GOOGLE_PROJECT_ID (optional)');
           console.error('3. Set GOOGLE_SERVICE_ACCOUNT_KEY with full JSON credentials');
+          console.error('');
+          console.error('📋 For detailed setup instructions, see: GOOGLE_SHEETS_SETUP_COMPLETE.md');
           console.error('Error details:', envError.message);
           return false;
         }
