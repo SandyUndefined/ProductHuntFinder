@@ -17,7 +17,7 @@ const cacheService = require('./services/cacheService');
 const { auth, logAuthAttempt } = require('./middleware/auth');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || (process.env.NODE_ENV === 'production' ? 3000 : 3001);
 
 // Security middleware
 app.use(helmet({
@@ -29,7 +29,7 @@ app.use(helmet({
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? process.env.FRONTEND_URL || true 
-    : ['http://localhost:3000', 'http://localhost:3001'],
+    : ['http://localhost:5173', 'http://localhost:3001'],
   credentials: true
 }));
 
@@ -442,66 +442,56 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Serve static React files in production
-if (process.env.NODE_ENV === 'production') {
-  // Serve static files from the React app build directory
-  app.use(express.static(path.join(__dirname, '../client/build')));
-
-  // Catch all handler: send back React's index.html file for client-side routing
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build/index.html'));
-  });
-} else {
-  // Development mode - serve a simple API info page
-  app.get('/', (req, res) => {
-    res.json({
-      name: 'Product Hunt Finder API',
-      version: '1.0.0',
-      status: 'running',
-      timestamp: new Date().toISOString(),
-      endpoints: {
-        'POST /api/cron/fetch': 'Trigger RSS feed fetching for all categories (includes LinkedIn enrichment)',
-        'POST /api/cron/fetch/:category': 'Trigger RSS feed fetching for specific category',
-        'POST /api/cron/enrich': 'Trigger LinkedIn enrichment for pending products',
-        'GET /api/cron/enrich/status': 'Get LinkedIn enrichment cache status and statistics',
-        'POST /api/cron/enrich/clear-cache': 'Clear the LinkedIn search cache',
-        'GET /api/cron/schedule/status': 'Get schedule status for all jobs',
-        'POST /api/cron/schedule/force/:jobName': 'Force a job to be runnable',
-        'POST /api/cron/cache/cleanup': 'Clean up expired cache entries',
-        'GET /api/cron/cache/stats': 'Get detailed cache statistics',
-        'POST /api/cron/resync-sheets': 'Resync approved products to Google Sheets (retry failed syncs) [AUTH REQUIRED]',
-        'GET /api/cron/status': 'Get current status and statistics',
-        'POST /api/cron/test/:category': 'Test RSS parsing for a category',
-        'GET /api/products': 'Get all products (supports ?category and ?status filters)',
-        'GET /api/products/category/:category': 'Get products by category',
-        'GET /api/makers': 'Get all makers (supports ?status filter) [AUTH REQUIRED]',
-        'POST /api/makers/:id/approve': 'Approve a maker (auto-syncs to Google Sheets) [AUTH REQUIRED]',
-        'POST /api/makers/:id/reject': 'Reject a maker [AUTH REQUIRED]',
-        'GET /api/sheets/status': 'Get Google Sheets sync status and statistics',
-        'GET /api/debug/enriched': 'Get all products with LinkedIn profiles (for testing)',
-        'GET /api/stats': 'Get database statistics',
-        'GET /api/status': 'Get system status including cron runs and maker counts',
-        'GET /api/health': 'Health check endpoint'
-      },
-      authentication: {
-        method: process.env.AUTH_METHOD || 'basic',
-        info: process.env.AUTH_METHOD === 'token' 
-          ? 'Use ?token=YOUR_TOKEN or X-Auth-Token header for protected endpoints'
-          : 'Use HTTP Basic Auth (username:password) for protected endpoints marked [AUTH REQUIRED]'
-      },
-      documentation: {
-        categories: require('./config/rssCategories'),
-        exampleRequests: {
-          fetchAll: `POST ${req.protocol}://${req.get('host')}/api/cron/fetch`,
-          fetchCategory: `POST ${req.protocol}://${req.get('host')}/api/cron/fetch/developer-tools`,
-          getProducts: `GET ${req.protocol}://${req.get('host')}/api/products`,
-          getByCategory: `GET ${req.protocol}://${req.get('host')}/api/products/category/saas`,
-          getStatus: `GET ${req.protocol}://${req.get('host')}/api/status`
-        }
+// API info page for development
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Product Hunt Finder API',
+    version: '1.0.0',
+    status: 'running',
+    timestamp: new Date().toISOString(),
+    note: 'Frontend is served by Vite on a separate port (5173 in development)',
+    endpoints: {
+      'POST /api/cron/fetch': 'Trigger RSS feed fetching for all categories (includes LinkedIn enrichment)',
+      'POST /api/cron/fetch/:category': 'Trigger RSS feed fetching for specific category',
+      'POST /api/cron/enrich': 'Trigger LinkedIn enrichment for pending products',
+      'GET /api/cron/enrich/status': 'Get LinkedIn enrichment cache status and statistics',
+      'POST /api/cron/enrich/clear-cache': 'Clear the LinkedIn search cache',
+      'GET /api/cron/schedule/status': 'Get schedule status for all jobs',
+      'POST /api/cron/schedule/force/:jobName': 'Force a job to be runnable',
+      'POST /api/cron/cache/cleanup': 'Clean up expired cache entries',
+      'GET /api/cron/cache/stats': 'Get detailed cache statistics',
+      'POST /api/cron/resync-sheets': 'Resync approved products to Google Sheets (retry failed syncs) [AUTH REQUIRED]',
+      'GET /api/cron/status': 'Get current status and statistics',
+      'POST /api/cron/test/:category': 'Test RSS parsing for a category',
+      'GET /api/products': 'Get all products (supports ?category and ?status filters)',
+      'GET /api/products/category/:category': 'Get products by category',
+      'GET /api/makers': 'Get all makers (supports ?status filter) [AUTH REQUIRED]',
+      'POST /api/makers/:id/approve': 'Approve a maker (auto-syncs to Google Sheets) [AUTH REQUIRED]',
+      'POST /api/makers/:id/reject': 'Reject a maker [AUTH REQUIRED]',
+      'GET /api/sheets/status': 'Get Google Sheets sync status and statistics',
+      'GET /api/debug/enriched': 'Get all products with LinkedIn profiles (for testing)',
+      'GET /api/stats': 'Get database statistics',
+      'GET /api/status': 'Get system status including cron runs and maker counts',
+      'GET /api/health': 'Health check endpoint'
+    },
+    authentication: {
+      method: process.env.AUTH_METHOD || 'basic',
+      info: process.env.AUTH_METHOD === 'token' 
+        ? 'Use ?token=YOUR_TOKEN or X-Auth-Token header for protected endpoints'
+        : 'Use HTTP Basic Auth (username:password) for protected endpoints marked [AUTH REQUIRED]'
+    },
+    documentation: {
+      categories: require('./config/rssCategories'),
+      exampleRequests: {
+        fetchAll: `POST ${req.protocol}://${req.get('host')}/api/cron/fetch`,
+        fetchCategory: `POST ${req.protocol}://${req.get('host')}/api/cron/fetch/developer-tools`,
+        getProducts: `GET ${req.protocol}://${req.get('host')}/api/products`,
+        getByCategory: `GET ${req.protocol}://${req.get('host')}/api/products/category/saas`,
+        getStatus: `GET ${req.protocol}://${req.get('host')}/api/status`
       }
-    });
+    }
   });
-}
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

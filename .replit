@@ -1,0 +1,45 @@
+# Replit configuration
+run = "npm run replit:start"
+entrypoint = "server/app.js"
+
+[nix]
+channel = "stable-22_11"
+
+[env]
+NODE_ENV = "production"
+
+[gitHubImport]
+requiredFiles = [".replit", "replit.nix"]
+
+[languages]
+
+[languages.javascript]
+pattern = "**/{*.js,*.jsx,*.ts,*.tsx,*.json}"
+
+[languages.javascript.languageServer]
+start = "typescript-language-server --stdio"
+
+[deployment]
+run = ["sh", "-c", "npm run replit:start"]
+
+[ports]
+[ports.3000]
+exposeLocalhost = true
+
+[ports.3001]
+exposeLocalhost = true
+
+[ports.5173]
+exposeLocalhost = true
+
+[[ports.forwarding]]
+externalPort = 80
+internalPort = 5173
+
+[[ports.forwarding]]
+externalPort = 3000
+internalPort = 3000
+
+[[ports.forwarding]]
+externalPort = 3001
+internalPort = 3001

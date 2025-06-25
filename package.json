@@ -5,12 +5,20 @@
   "main": "server/app.js",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
-    "server:dev": "nodemon server/app.js",
-    "client:dev": "cd client && npm start",
-    "start": "node server/app.js",
-    "build": "cd client && npm run build",
+    "server:dev": "NODE_ENV=development nodemon server/app.js",
+    "client:dev": "cd client && npm run dev",
+    "start": "NODE_ENV=production node server/app.js",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "cd client && npm run build",
+    "build:server": "echo 'Server build complete'",
+    "production": "npm run build && npm run start:production",
+    "start:production": "concurrently \"npm run start\" \"npm run client:preview\"",
+    "client:preview": "cd client && npm run preview",
     "install:client": "cd client && npm install",
     "postinstall": "npm run install:client",
+    "deploy": "npm run build && npm run start:production",
+    "replit:dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "replit:start": "npm run build && npm run start:production",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -30,7 +38,9 @@
     "google-search-results-nodejs": "^2.1.0",
     "googleapis": "^150.0.1",
     "helmet": "^7.1.0",
+    "path": "^0.12.7",
     "rss-parser": "^3.13.0",
+    "serve-static": "^1.15.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
