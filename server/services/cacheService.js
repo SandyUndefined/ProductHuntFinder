@@ -8,96 +8,110 @@ class CacheService {
   }
 
   /**
-   * Get cached LinkedIn result for a maker
-   * @param {string} makerName - Name of the maker
-   * @returns {Promise<string|null>} - Cached LinkedIn URL or null
+   * Get cached item (LinkedIn or PH enrichment)
+   * @param {string} key - Cache key
+   * @returns {Promise<Object|null>} - Cached data or null
    */
-  async getLinkedInCache(makerName) {
-    const cleanName = this.cleanKey(makerName);
-    
+  async getItem(key) {
     // Check in-memory cache first
-    if (this.inMemoryCache.has(cleanName)) {
-      const cached = this.inMemoryCache.get(cleanName);
+    if (this.inMemoryCache.has(key)) {
+      const cached = this.inMemoryCache.get(key);
       if (!this.isExpired(cached.timestamp)) {
-        console.log(`In-memory cache hit for: ${cleanName}`);
-        return cached.linkedin;
+        console.log(`In-memory cache hit for: ${key}`);
+        return cached.data;
       } else {
-        // Remove expired entry
-        this.inMemoryCache.delete(cleanName);
+        this.inMemoryCache.delete(key);
       }
     }
 
     // Check database cache
     try {
-      const cacheKey = `linkedin_cache:${cleanName}`;
-      const cached = await dbService.getItem(cacheKey);
-      
-      if (cached && !this.isExpired(cached.lastChecked)) {
-        console.log(`Database cache hit for: ${cleanName}`);
-        
-        // Add to in-memory cache for faster future access
-        this.addToMemoryCache(cleanName, cached.linkedin, cached.lastChecked);
-        
-        return cached.linkedin;
+      const cached = await dbService.getItem(key);
+      if (cached && !this.isExpired(cached.timestamp)) {
+        console.log(`Database cache hit for: ${key}`);
+        this.addToMemoryCache(key, cached.data, cached.timestamp);
+        return cached.data;
       }
-      
-      // Clean up expired cache entry
-      if (cached && this.isExpired(cached.lastChecked)) {
-        await dbService.deleteItem(cacheKey);
+      if (cached && this.isExpired(cached.timestamp)) {
+        await dbService.deleteItem(key);
       }
     } catch (error) {
-      console.error('Error reading LinkedIn cache:', error.message);
+      console.error(`Error reading cache for ${key}:`, error.message);
     }
-
     return null;
   }
 
   /**
-   * Set cached LinkedIn result for a maker
-   * @param {string} makerName - Name of the maker
-   * @param {string|null} linkedinUrl - LinkedIn URL or null
+   * Set cached item (LinkedIn or PH enrichment)
+   * @param {string} key - Cache key
+   * @param {Object} data - Data to cache
+   * @param {number} expiryMs - Expiry time in milliseconds
    * @returns {Promise<void>}
    */
-  async setLinkedInCache(makerName, linkedinUrl) {
-    const cleanName = this.cleanKey(makerName);
+  async setItem(key, data, expiryMs) {
     const timestamp = new Date().toISOString();
-    
-    // Add to in-memory cache
-    this.addToMemoryCache(cleanName, linkedinUrl, timestamp);
-    
-    // Save to database cache
+    this.addToMemoryCache(key, data, timestamp);
     try {
-      const cacheKey = `linkedin_cache:${cleanName}`;
-      const cacheData = {
-        makerName: cleanName,
-        linkedin: linkedinUrl,
-        lastChecked: timestamp
-      };
-      
-      await dbService.setItem(cacheKey, cacheData);
-      console.log(`Cached LinkedIn result for: ${cleanName} -> ${linkedinUrl || 'null'}`);
+      const cacheData = { data, timestamp };
+      await dbService.setItem(key, cacheData);
+      console.log(`Cached data for: ${key}`);
     } catch (error) {
-      console.error('Error saving LinkedIn cache:', error.message);
+      console.error(`Error saving cache for ${key}:`, error.message);
+    }
+  }
+
+  /**
+   * Delete cached item
+   * @param {string} key - Cache key
+   * @returns {Promise<void>}
+   */
+  async deleteItem(key) {
+    this.inMemoryCache.delete(key);
+    try {
+      await dbService.deleteItem(key);
+      console.log(`Deleted cache item: ${key}`);
+    } catch (error) {
+      console.error(`Error deleting cache item ${key}:`, error.message);
+    }
+  }
+
+  /**
+   * Get keys matching a pattern (e.g., 'ph_enrichment_cache:*')
+   * @param {string} pattern - Pattern to match keys
+   * @returns {Promise<string[]>} - Array of matching keys
+   */
+  async getKeysByPattern(pattern) {
+    try {
+      // Check in-memory cache
+      const memoryKeys = Array.from(this.inMemoryCache.keys()).filter((key) =>
+        pattern.endsWith('*') ? key.startsWith(pattern.slice(0, -1)) : key === pattern
+      );
+
+      // Check database cache
+      const dbKeys = await dbService.getKeysByPattern(pattern);
+
+      // Combine and deduplicate keys
+      const allKeys = [...new Set([...memoryKeys, ...dbKeys])];
+      console.log(`Found ${allKeys.length} keys matching pattern: ${pattern}`);
+      return allKeys;
+    } catch (error) {
+      console.error(`Error getting keys by pattern ${pattern}:`, error.message);
+      return [];
     }
   }
 
   /**
    * Add entry to in-memory cache with size management
    * @param {string} key - Cache key
-   * @param {string|null} linkedin - LinkedIn URL
+   * @param {Object} data - Data to cache
    * @param {string} timestamp - Timestamp
    */
-  addToMemoryCache(key, linkedin, timestamp) {
-    // Remove oldest entries if cache is full
+  addToMemoryCache(key, data, timestamp) {
     if (this.inMemoryCache.size >= this.maxInMemorySize) {
       const oldestKey = this.inMemoryCache.keys().next().value;
       this.inMemoryCache.delete(oldestKey);
     }
-    
-    this.inMemoryCache.set(key, {
-      linkedin,
-      timestamp
-    });
+    this.inMemoryCache.set(key, { data, timestamp });
   }
 
   /**
@@ -108,7 +122,7 @@ class CacheService {
   isExpired(timestamp) {
     const cacheTime = new Date(timestamp).getTime();
     const now = Date.now();
-    return (now - cacheTime) > this.cacheExpiry;
+    return now - cacheTime > this.cacheExpiry;
   }
 
   /**
@@ -136,17 +150,19 @@ class CacheService {
       errors: []
     };
 
-    // Clear in-memory cache
-    results.memoryCleared = this.inMemoryCache.size;
-    this.inMemoryCache.clear();
+    // Clear in-memory cache for LinkedIn
+    const linkedinKeys = Array.from(this.inMemoryCache.keys()).filter((key) =>
+      key.startsWith('linkedin_cache:')
+    );
+    results.memoryCleared = linkedinKeys.length;
+    linkedinKeys.forEach((key) => this.inMemoryCache.delete(key));
 
     // Clear database cache
     try {
-      const allKeys = await dbService.getKeysByPattern('linkedin_cache:*');
-      
+      const allKeys = await this.getKeysByPattern('linkedin_cache:*');
       for (const key of allKeys) {
         try {
-          await dbService.deleteItem(key);
+          await this.deleteItem(key);
           results.databaseCleared++;
         } catch (error) {
           results.errors.push(`Failed to delete ${key}: ${error.message}`);
@@ -156,7 +172,7 @@ class CacheService {
       results.errors.push(`Failed to clear database cache: ${error.message}`);
     }
 
-    console.log(`Cache cleared: ${results.memoryCleared} memory, ${results.databaseCleared} database`);
+    console.log(`LinkedIn cache cleared: ${results.memoryCleared} memory, ${results.databaseCleared} database`);
     return results;
   }
 
@@ -182,19 +198,18 @@ class CacheService {
     };
 
     try {
-      const allKeys = await dbService.getKeysByPattern('linkedin_cache:*');
+      const allKeys = await this.getKeysByPattern('linkedin_cache:*');
       stats.database.totalEntries = allKeys.length;
 
       for (const key of allKeys) {
         try {
           const cached = await dbService.getItem(key);
-          if (cached && !this.isExpired(cached.lastChecked)) {
+          if (cached && !this.isExpired(cached.timestamp)) {
             stats.database.validEntries++;
           } else {
             stats.database.expiredEntries++;
           }
         } catch (error) {
-          // Count as expired if we can't read it
           stats.database.expiredEntries++;
         }
       }
@@ -217,14 +232,14 @@ class CacheService {
     };
 
     try {
-      const allKeys = await dbService.getKeysByPattern('linkedin_cache:*');
+      const allKeys = await this.getKeysByPattern('linkedin_cache:*');
       results.checked = allKeys.length;
 
       for (const key of allKeys) {
         try {
           const cached = await dbService.getItem(key);
-          if (!cached || this.isExpired(cached.lastChecked)) {
-            await dbService.deleteItem(key);
+          if (!cached || this.isExpired(cached.timestamp)) {
+            await this.deleteItem(key);
             results.removed++;
           }
         } catch (error) {
@@ -240,31 +255,27 @@ class CacheService {
   }
 
   /**
-   * Get all cached LinkedIn entries (for debugging)
+   * Get all cached entries (for debugging)
    * @returns {Promise<Array>} - Array of cached entries
    */
   async getAllCachedEntries() {
     const entries = [];
 
     try {
-      const allKeys = await dbService.getKeysByPattern('linkedin_cache:*');
-
+      const allKeys = await this.getKeysByPattern('linkedin_cache:*');
       for (const key of allKeys) {
         try {
           const cached = await dbService.getItem(key);
           if (cached) {
             entries.push({
-              makerName: cached.makerName,
-              linkedin: cached.linkedin,
-              lastChecked: cached.lastChecked,
-              isExpired: this.isExpired(cached.lastChecked)
+              key,
+              data: cached.data,
+              timestamp: cached.timestamp,
+              isExpired: this.isExpired(cached.timestamp)
             });
           }
         } catch (error) {
-          entries.push({
-            key,
-            error: error.message
-          });
+          entries.push({ key, error: error.message });
         }
       }
     } catch (error) {

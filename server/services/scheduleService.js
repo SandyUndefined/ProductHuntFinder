@@ -3,7 +3,7 @@ const dbService = require('./dbService');
 class ScheduleService {
   constructor() {
     this.inMemorySchedule = new Map();
-    this.defaultIntervalHours = parseInt(process.env.CRON_INTERVAL_HOURS || '4'); // Default 4 hours
+    this.defaultIntervalHours = parseFloat(process.env.CRON_INTERVAL_HOURS || '0.05'); // Default 3 minutes (0.05 hours)
   }
 
   /**

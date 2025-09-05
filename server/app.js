@@ -53,10 +53,57 @@ if (process.env.NODE_ENV === 'production') {
 // API Routes
 app.use('/api/cron', cronRoutes);
 
+// LinkedIn API proxy
+app.post('/api/linkedin/companies', async (req, res) => {
+  try {
+    const { linkedin_url } = req.body;
+    if (!linkedin_url) {
+      return res.status(400).json({ error: 'LinkedIn URL is required' });
+    }
+    
+    const API_KEY = 'd6c0bfe4e7dab55384f8556b7c39e45aae439ce179fbb864b96545646b3577a4'; // Replace with valid key if this is invalid
+    
+    console.log(`Enriching LinkedIn URL: ${linkedin_url}`);
+    
+    // Validate LinkedIn URL format
+    if (!linkedin_url.includes('linkedin.com/company/')) {
+      return res.status(400).json({ 
+        error: 'Invalid LinkedIn URL format',
+        details: 'URL must contain "linkedin.com/company/"'
+      });
+    }
+    
+    const response = await fetch('https://app.tryspecter.com/api/v1/companies', { // Corrected URL (alternate: 'https://api.tryspecter.com/companies' if this fails)
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY // Corrected header (no Bearer)
+      },
+      body: JSON.stringify({ linkedin_url })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Specter API error (${response.status}):`, errorText);
+      throw new Error(`Specter API responded with status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log(`Successfully enriched: ${linkedin_url}`);
+    res.json(data); // Return full array; frontend handles [0]
+  } catch (error) {
+    console.error('Specter API proxy error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch Specter data',
+      details: error.message 
+    });
+  }
+});
+
 // Products API routes
 app.get('/api/products', async (req, res) => {
   try {
-    const { category, status } = req.query;
+    const { category, status, sort, limit } = req.query;
     let products;
 
     if (category) {
@@ -65,6 +112,24 @@ app.get('/api/products', async (req, res) => {
       products = await dbService.getProductsByStatus(status);
     } else {
       products = await dbService.getAllProducts();
+    }
+
+    // Apply sorting
+    if (sort === 'votes') {
+      products.sort((a, b) => {
+        const votesA = a.upvotes || 0;
+        const votesB = b.upvotes || 0;
+        if (votesA !== votesB) {
+          return votesB - votesA; // Highest votes first
+        }
+        // If votes are equal, sort by newest first
+        return new Date(b.publishedAt) - new Date(a.publishedAt);
+      });
+    }
+
+    // Apply limit
+    if (limit && !isNaN(limit)) {
+      products = products.slice(0, parseInt(limit));
     }
 
     res.json({
@@ -78,6 +143,72 @@ app.get('/api/products', async (req, res) => {
       success: false,
       error: {
         message: 'Failed to fetch products',
+        details: error.message
+      }
+    });
+  }
+});
+
+// Upvote product endpoint
+app.post('/api/products/:id/upvote', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await dbService.upvoteProduct(id);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Product upvoted successfully',
+        upvotes: result.upvotes
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: {
+          message: 'Product not found',
+          details: result.error
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error upvoting product:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to upvote product',
+        details: error.message
+      }
+    });
+  }
+});
+
+// Unvote (remove upvote) endpoint
+app.post('/api/products/:id/unvote', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await dbService.unvoteProduct(id);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Product unvoted successfully',
+        upvotes: result.upvotes
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: {
+          message: 'Product not found',
+          details: result.error
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error unvoting product:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to unvote product',
         details: error.message
       }
     });
@@ -477,16 +608,6 @@ app.get('/', (req, res) => {
     endpoints: {
       'POST /api/cron/fetch': 'Trigger RSS feed fetching for all categories (includes LinkedIn enrichment)',
       'POST /api/cron/fetch/:category': 'Trigger RSS feed fetching for specific category',
-      'POST /api/cron/enrich': 'Trigger LinkedIn enrichment for pending products',
-      'GET /api/cron/enrich/status': 'Get LinkedIn enrichment cache status and statistics',
-      'POST /api/cron/enrich/clear-cache': 'Clear the LinkedIn search cache',
-      'GET /api/cron/schedule/status': 'Get schedule status for all jobs',
-      'POST /api/cron/schedule/force/:jobName': 'Force a job to be runnable',
-      'POST /api/cron/cache/cleanup': 'Clean up expired cache entries',
-      'GET /api/cron/cache/stats': 'Get detailed cache statistics',
-      'POST /api/cron/resync-sheets': 'Resync approved products to Google Sheets (retry failed syncs) [AUTH REQUIRED]',
-      'GET /api/cron/status': 'Get current status and statistics',
-      'POST /api/cron/test/:category': 'Test RSS parsing for a category',
       'GET /api/products': 'Get all products (supports ?category and ?status filters)',
       'GET /api/products/category/:category': 'Get products by category',
       'GET /api/makers': 'Get all makers (supports ?status filter) [AUTH REQUIRED]',

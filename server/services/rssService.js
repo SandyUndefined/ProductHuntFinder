@@ -88,6 +88,14 @@ class RSSService {
             const savedProduct = await dbService.saveProduct(productData);
             results.processed++;
             
+            // Enrich with Product Hunt specific details (votes, day rank, topics)
+            try {
+              const phEnrichmentService = await import('./phEnrichmentService.js');
+              await phEnrichmentService.default.enrichProduct(savedProduct);
+            } catch (enrichError) {
+              console.warn(`Enrichment failed for ${savedProduct.name}:`, enrichError.message);
+            }
+            
             // Check if it was a new product or duplicate
             if (savedProduct.createdAt === savedProduct.updatedAt) {
               results.newProducts++;
@@ -121,6 +129,9 @@ class RSSService {
         console.warn('Skipping item: missing title or link');
         return null;
       }
+      
+      // Normalize the Product Hunt link to prevent duplicates
+      const normalizedLink = this.normalizeLink(item.link);
 
       // Extract description from various possible fields
       let description = '';
@@ -149,8 +160,18 @@ class RSSService {
         description: this.cleanDescription(description),
         category: category,
         publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-        phLink: item.link,
-        makerName: makerName ? this.cleanMakerName(makerName) : null
+        phLink: normalizedLink, // Use normalized link to prevent duplicates
+        originalLink: item.link, // Store original link for reference
+        makerName: makerName ? this.cleanMakerName(makerName) : null,
+        upvotes: 0, // Initialize with 0 upvotes for new products
+        phVotes: 0, // Initialize Product Hunt votes
+        phDayRank: null, // Initialize Product Hunt day rank
+        phTopics: [], // Initialize Product Hunt topics
+        companyWebsite: null, // Company website URL
+        companyInfo: null, // Company information text
+        launchDate: null, // Launch date
+        accelerator: null, // Accelerator info (e.g., Y Combinator)
+        linkedin: null // LinkedIn URL
       };
 
       // Validate that we have meaningful data
@@ -178,6 +199,24 @@ class RSSService {
       .replace(/\s*-\s*Product Hunt$/i, '')
       .trim()
       .substring(0, 200); // Limit length
+  }
+  
+  /**
+   * Normalize a URL to prevent duplicates with different formats
+   * @param {string} url - URL to normalize
+   * @returns {string} - Normalized URL
+   */
+  normalizeLink(url) {
+    if (!url) return '';
+    
+    try {
+      // Remove trailing slashes and query parameters
+      const parsedUrl = new URL(url);
+      return parsedUrl.origin + parsedUrl.pathname.replace(/\/$/, '');
+    } catch (error) {
+      console.warn(`Failed to normalize URL: ${url}`, error.message);
+      return url;
+    }
   }
 
   /**

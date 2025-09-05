@@ -4,7 +4,6 @@ const path = require('path');
 
 class DatabaseService {
   constructor() {
-    // Always use local storage
     this.storage = 'local';
     this.dbPath = path.join(process.cwd(), 'data', 'products.json');
     this.initLocalStorage();
@@ -15,7 +14,6 @@ class DatabaseService {
       const dir = path.dirname(this.dbPath);
       await fs.mkdir(dir, { recursive: true });
       
-      // Check if file exists, if not create it with empty structure
       try {
         await fs.access(this.dbPath);
       } catch {
@@ -30,9 +28,10 @@ class DatabaseService {
           schedule: {},
           misc: {}
         }, null, 2));
+        console.log(`Initialized database at ${this.dbPath}`);
       }
     } catch (error) {
-      console.error('Error initializing local storage:', error);
+      console.error('Error initializing local storage:', error.message);
     }
   }
 
@@ -41,14 +40,13 @@ class DatabaseService {
       const data = await fs.readFile(this.dbPath, 'utf8');
       const parsed = JSON.parse(data);
       
-      // Ensure all required sections exist
       if (!parsed.cache) parsed.cache = {};
       if (!parsed.schedule) parsed.schedule = {};
       if (!parsed.misc) parsed.misc = {};
       
       return parsed;
     } catch (error) {
-      console.error('Error reading local data:', error);
+      console.error('Error reading local data:', error.message);
       return { 
         products: {}, 
         productList: [],
@@ -63,8 +61,9 @@ class DatabaseService {
   async writeLocalData(data) {
     try {
       await fs.writeFile(this.dbPath, JSON.stringify(data, null, 2));
+      console.log('Database updated successfully');
     } catch (error) {
-      console.error('Error writing local data:', error);
+      console.error('Error writing local data:', error.message);
     }
   }
 
@@ -72,7 +71,6 @@ class DatabaseService {
     try {
       const data = await this.readLocalData();
       
-      // Initialize additional data structures if they don't exist
       if (!data.cache) data.cache = {};
       if (!data.schedule) data.schedule = {};
       if (!data.misc) data.misc = {};
@@ -84,16 +82,15 @@ class DatabaseService {
         return data.products[productId] || null;
       } else if (key === 'metadata') {
         return data.metadata;
-      } else if (key.startsWith('linkedin_cache:')) {
+      } else if (key.startsWith('linkedin_cache:') || key.startsWith('ph_enrichment_cache:')) {
         return data.cache[key] || null;
       } else if (key.startsWith('schedule:')) {
         return data.schedule[key] || null;
       } else {
-        // Generic key storage
         return data.misc[key] || null;
       }
     } catch (error) {
-      console.error(`Error getting item ${key}:`, error);
+      console.error(`Error getting item ${key}:`, error.message);
       return null;
     }
   }
@@ -102,7 +99,6 @@ class DatabaseService {
     try {
       const data = await this.readLocalData();
       
-      // Initialize additional data structures if they don't exist
       if (!data.cache) data.cache = {};
       if (!data.schedule) data.schedule = {};
       if (!data.misc) data.misc = {};
@@ -116,19 +112,18 @@ class DatabaseService {
         data.metadata.lastUpdated = new Date().toISOString();
       } else if (key === 'metadata') {
         data.metadata = value;
-      } else if (key.startsWith('linkedin_cache:')) {
+      } else if (key.startsWith('linkedin_cache:') || key.startsWith('ph_enrichment_cache:')) {
         data.cache[key] = value;
       } else if (key.startsWith('schedule:')) {
         data.schedule[key] = value;
       } else {
-        // Generic key storage
         data.misc[key] = value;
       }
       
       await this.writeLocalData(data);
       return true;
     } catch (error) {
-      console.error(`Error setting item ${key}:`, error);
+      console.error(`Error setting item ${key}:`, error.message);
       return false;
     }
   }
@@ -146,21 +141,19 @@ class DatabaseService {
     }
   }
 
-  /**
-   * Store a product in the database
-   * @param {Object} productData - Product information
-   * @returns {Promise<Object>} - Saved product with ID
-   */
   async saveProduct(productData) {
     try {
-      // Check for duplicates by link
       const existingProduct = await this.findProductByLink(productData.phLink);
       if (existingProduct) {
-        console.log(`Product already exists: ${productData.name}`);
+        if (existingProduct.status === 'rejected') {
+          console.log(`Skipping previously rejected product: ${productData.name}`);
+          return existingProduct;
+        }
+        
+        console.log(`Product already exists: ${productData.name} (${productData.phLink})`);
         return existingProduct;
       }
 
-      // Create new product with ID and timestamps
       const product = {
         id: uuidv4(),
         name: productData.name,
@@ -170,54 +163,69 @@ class DatabaseService {
         phLink: productData.phLink,
         makerName: productData.makerName || null,
         linkedin: productData.linkedin || null,
+        upvotes: productData.upvotes || 0,
+        phVotes: productData.phVotes || 0,
+        phDayRank: productData.phDayRank || null,
+        phTopics: productData.phTopics || [],
+        companyWebsite: productData.companyWebsite || null,
+        companyInfo: productData.companyInfo || null,
+        launchDate: productData.launchDate || null,
+        accelerator: productData.accelerator || null,
+        phGithub: productData.phGithub || null,
+        thumbnail: productData.thumbnail || null,
         status: 'pending',
         syncedToSheets: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
-      // Save to database
       const key = `product:${product.id}`;
       await this.setItem(key, product);
-
-      // Also maintain a list of all product IDs for efficient querying
       await this.addToProductList(product.id);
 
       console.log(`Product saved: ${product.name} [${product.category}]`);
       return product;
     } catch (error) {
-      console.error('Error saving product:', error);
+      console.error('Error saving product:', error.message);
       throw error;
     }
   }
 
-  /**
-   * Find a product by its Product Hunt link
-   * @param {string} phLink - Product Hunt link
-   * @returns {Promise<Object|null>} - Product or null if not found
-   */
   async findProductByLink(phLink) {
     try {
+      if (!phLink) {
+        console.warn('Cannot find product with empty link');
+        return null;
+      }
+      
+      const normalizedLink = this.normalizeProductHuntLink(phLink);
       const productIds = await this.getProductList();
       
       for (const id of productIds) {
         const product = await this.getItem(`product:${id}`);
-        if (product && product.phLink === phLink) {
+        if (product && this.normalizeProductHuntLink(product.phLink) === normalizedLink) {
           return product;
         }
       }
       
       return null;
     } catch (error) {
-      console.error('Error finding product by link:', error);
+      console.error('Error finding product by link:', error.message);
       return null;
     }
   }
+  
+  normalizeProductHuntLink(link) {
+    if (!link) return '';
+    
+    try {
+      const url = new URL(link);
+      return url.origin + url.pathname.replace(/\/$/, '');
+    } catch (error) {
+      return link;
+    }
+  }
 
-  /**
-   * Get all products
-   * @returns {Promise<Array>} - Array of all products
-   */
   async getAllProducts() {
     try {
       const productIds = await this.getProductList();
@@ -230,50 +238,33 @@ class DatabaseService {
         }
       }
 
-      // Sort by publishedAt date (newest first)
       return products.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
     } catch (error) {
-      console.error('Error getting all products:', error);
+      console.error('Error getting all products:', error.message);
       return [];
     }
   }
 
-  /**
-   * Get products by category
-   * @param {string} category - Category to filter by
-   * @returns {Promise<Array>} - Array of products in the category
-   */
   async getProductsByCategory(category) {
     try {
       const allProducts = await this.getAllProducts();
       return allProducts.filter(product => product.category === category);
     } catch (error) {
-      console.error('Error getting products by category:', error);
+      console.error('Error getting products by category:', error.message);
       return [];
     }
   }
 
-  /**
-   * Get products by status
-   * @param {string} status - Status to filter by
-   * @returns {Promise<Array>} - Array of products with the status
-   */
   async getProductsByStatus(status) {
     try {
       const allProducts = await this.getAllProducts();
       return allProducts.filter(product => product.status === status);
     } catch (error) {
-      console.error('Error getting products by status:', error);
+      console.error('Error getting products by status:', error.message);
       return [];
     }
   }
 
-  /**
-   * Update a product with LinkedIn information
-   * @param {string} productId - Product ID
-   * @param {string|null} linkedin - LinkedIn profile URL or null
-   * @returns {Promise<Object|null>} - Updated product or null if not found
-   */
   async updateProductLinkedIn(productId, linkedin) {
     try {
       const product = await this.getItem(`product:${productId}`);
@@ -282,27 +273,19 @@ class DatabaseService {
         return null;
       }
 
-      // Update LinkedIn field and timestamp
       product.linkedin = linkedin;
       product.updatedAt = new Date().toISOString();
 
-      // Save back to database
       await this.setItem(`product:${productId}`, product);
       
       console.log(`Updated LinkedIn for product: ${product.name} -> ${linkedin || 'null'}`);
       return product;
     } catch (error) {
-      console.error('Error updating product LinkedIn:', error);
+      console.error('Error updating product LinkedIn:', error.message);
       return null;
     }
   }
 
-  /**
-   * Update a product's status (approve/reject)
-   * @param {string} productId - Product ID
-   * @param {string} status - New status ('approved' or 'rejected')
-   * @returns {Promise<boolean>} - Success status
-   */
   async updateProductStatus(productId, status) {
     try {
       const product = await this.getItem(`product:${productId}`);
@@ -311,7 +294,6 @@ class DatabaseService {
         return false;
       }
 
-      // Update status and timestamp
       product.status = status;
       product.updatedAt = new Date().toISOString();
       
@@ -319,21 +301,16 @@ class DatabaseService {
         product.approvedAt = new Date().toISOString();
       }
 
-      // Save back to database
       await this.setItem(`product:${productId}`, product);
       
       console.log(`Updated status for product: ${product.name} -> ${status}`);
       return true;
     } catch (error) {
-      console.error('Error updating product status:', error);
+      console.error('Error updating product status:', error.message);
       return false;
     }
   }
 
-  /**
-   * Get products that need LinkedIn enrichment
-   * @returns {Promise<Array>} - Array of products needing LinkedIn enrichment
-   */
   async getProductsNeedingEnrichment() {
     try {
       const allProducts = await this.getAllProducts();
@@ -343,17 +320,11 @@ class DatabaseService {
         product.makerName !== null
       );
     } catch (error) {
-      console.error('Error getting products needing enrichment:', error);
+      console.error('Error getting products needing enrichment:', error.message);
       return [];
     }
   }
 
-  /**
-   * Update a product's Google Sheets sync status
-   * @param {string} productId - Product ID
-   * @param {boolean} synced - Whether the product has been synced to sheets
-   * @returns {Promise<boolean>} - Success status
-   */
   async updateProductSheetsSyncStatus(productId, synced) {
     try {
       const product = await this.getItem(`product:${productId}`);
@@ -362,7 +333,6 @@ class DatabaseService {
         return false;
       }
 
-      // Update sync status and timestamp
       product.syncedToSheets = synced;
       product.updatedAt = new Date().toISOString();
       
@@ -370,21 +340,16 @@ class DatabaseService {
         product.syncedToSheetsAt = new Date().toISOString();
       }
 
-      // Save back to database
       await this.setItem(`product:${productId}`, product);
       
       console.log(`Updated sheets sync status for product: ${product.name} -> ${synced}`);
       return true;
     } catch (error) {
-      console.error('Error updating product sheets sync status:', error);
+      console.error('Error updating product sheets sync status:', error.message);
       return false;
     }
   }
 
-  /**
-   * Get approved products that need to be synced to Google Sheets
-   * @returns {Promise<Array>} - Array of approved products not yet synced
-   */
   async getApprovedProductsNeedingSync() {
     try {
       const allProducts = await this.getAllProducts();
@@ -393,23 +358,17 @@ class DatabaseService {
         !product.syncedToSheets
       );
     } catch (error) {
-      console.error('Error getting approved products needing sync:', error);
+      console.error('Error getting approved products needing sync:', error.message);
       return [];
     }
   }
 
-  /**
-   * Get database statistics
-   * @returns {Promise<Object>} - Statistics about the database
-   */
   async getStats() {
     try {
       const products = await this.getAllProducts();
       
-      // A product is considered enriched if it has been processed (linkedin field exists, even if null)
       const enrichedCount = products.filter(p => p.hasOwnProperty('linkedin')).length;
       
-      // A product needs enrichment if it's pending, has a maker name, but hasn't been processed yet
       const needingEnrichmentCount = products.filter(p => 
         p.status === 'pending' && 
         !p.hasOwnProperty('linkedin') && 
@@ -430,25 +389,50 @@ class DatabaseService {
       };
 
       products.forEach(product => {
-        // Count by category
         stats.byCategory[product.category] = (stats.byCategory[product.category] || 0) + 1;
-        
-        // Count by status
         stats.byStatus[product.status] = (stats.byStatus[product.status] || 0) + 1;
       });
 
       return stats;
     } catch (error) {
-      console.error('Error getting stats:', error);
+      console.error('Error getting stats:', error.message);
       return { totalProducts: 0, byCategory: {}, byStatus: {} };
     }
   }
 
-  /**
-   * Delete an item from the database
-   * @param {string} key - Key to delete
-   * @returns {Promise<boolean>} - Success status
-   */
+  async upvoteProduct(productId) {
+    try {
+      const data = await this.readLocalData();
+      
+      if (!data.products[productId]) {
+        return {
+          success: false,
+          error: 'Product not found'
+        };
+      }
+
+      if (!data.products[productId].upvotes) {
+        data.products[productId].upvotes = 0;
+      }
+
+      data.products[productId].upvotes += 1;
+      data.products[productId].updatedAt = new Date().toISOString();
+
+      await this.writeLocalData(data);
+      
+      return {
+        success: true,
+        upvotes: data.products[productId].upvotes
+      };
+    } catch (error) {
+      console.error(`Error upvoting product ${productId}:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
   async deleteItem(key) {
     try {
       const data = await this.readLocalData();
@@ -459,13 +443,12 @@ class DatabaseService {
         const productId = key.replace('product:', '');
         if (data.products[productId]) {
           delete data.products[productId];
-          // Remove from product list
           const index = data.productList.indexOf(productId);
           if (index > -1) {
             data.productList.splice(index, 1);
           }
         }
-      } else if (key.startsWith('linkedin_cache:')) {
+      } else if (key.startsWith('linkedin_cache:') || key.startsWith('ph_enrichment_cache:')) {
         if (data.cache[key]) {
           delete data.cache[key];
         }
@@ -480,29 +463,24 @@ class DatabaseService {
       }
       
       await this.writeLocalData(data);
+      console.log(`Deleted item: ${key}`);
       return true;
     } catch (error) {
-      console.error(`Error deleting item ${key}:`, error);
+      console.error(`Error deleting item ${key}:`, error.message);
       return false;
     }
   }
 
-  /**
-   * Get all keys matching a pattern
-   * @param {string} pattern - Pattern to match (supports * wildcard)
-   * @returns {Promise<Array>} - Array of matching keys
-   */
   async getKeysByPattern(pattern) {
     try {
       const data = await this.readLocalData();
       const keys = [];
       
-      // Handle different key types
       if (pattern.startsWith('product:')) {
         if (pattern === 'product:*') {
           data.productList.forEach(id => keys.push(`product:${id}`));
         }
-      } else if (pattern.startsWith('linkedin_cache:')) {
+      } else if (pattern.startsWith('linkedin_cache:') || pattern.startsWith('ph_enrichment_cache:')) {
         Object.keys(data.cache).forEach(key => {
           if (this.matchPattern(key, pattern)) {
             keys.push(key);
@@ -522,19 +500,14 @@ class DatabaseService {
         });
       }
       
+      console.log(`Found ${keys.length} keys for pattern: ${pattern}`);
       return keys;
     } catch (error) {
-      console.error(`Error getting keys by pattern ${pattern}:`, error);
+      console.error(`Error getting keys by pattern ${pattern}:`, error.message);
       return [];
     }
   }
 
-  /**
-   * Simple pattern matching with * wildcard
-   * @param {string} key - Key to test
-   * @param {string} pattern - Pattern with * wildcard
-   * @returns {boolean} - Whether key matches pattern
-   */
   matchPattern(key, pattern) {
     if (!pattern.includes('*')) {
       return key === pattern;
@@ -542,6 +515,93 @@ class DatabaseService {
     
     const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
     return regex.test(key);
+  }
+
+  async updateProductPhDetails(productId, phDetails) {
+    try {
+      const data = await this.readLocalData();
+
+      if (!data.products[productId]) {
+        console.error(`Product not found: ${productId}`);
+        return {
+          success: false,
+          error: 'Product not found'
+        };
+      }
+
+      data.products[productId] = {
+        ...data.products[productId],
+        ...phDetails,
+        phGithub: phDetails.phGithub,
+        thumbnail: phDetails.thumbnail || data.products[productId].thumbnail,
+        updatedAt: new Date().toISOString()
+      };
+
+      await this.writeLocalData(data);
+
+      console.log(`Updated PH details for product: ${data.products[productId].name}`);
+      return {
+        success: true,
+        product: data.products[productId]
+      };
+    } catch (error) {
+      console.error(`Error updating PH details for product ${productId}:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async updateProductFields(productId, fields) {
+    try {
+      const product = await this.getItem(`product:${productId}`);
+      if (!product) {
+        console.error(`Product not found: ${productId}`);
+        return null;
+      }
+      const updated = { ...product, ...fields, updatedAt: new Date().toISOString() };
+      await this.setItem(`product:${productId}`, updated);
+      console.log(`Updated fields for product: ${product.name}`);
+      return updated;
+    } catch (error) {
+      console.error('Error updating product fields:', error.message);
+      return null;
+    }
+  }
+
+  async unvoteProduct(productId) {
+    try {
+      const data = await this.readLocalData();
+
+      if (!data.products[productId]) {
+        return {
+          success: false,
+          error: 'Product not found'
+        };
+      }
+
+      if (!data.products[productId].upvotes) {
+        data.products[productId].upvotes = 0;
+      }
+
+      data.products[productId].upvotes = Math.max(0, (data.products[productId].upvotes || 0) - 1);
+      data.products[productId].updatedAt = new Date().toISOString();
+
+      await this.writeLocalData(data);
+
+      console.log(`Unvoted product: ${data.products[productId].name}, upvotes: ${data.products[productId].upvotes}`);
+      return {
+        success: true,
+        upvotes: data.products[productId].upvotes
+      };
+    } catch (error) {
+      console.error(`Error unvoting product ${productId}:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
   }
 }
 

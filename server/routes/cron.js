@@ -5,11 +5,11 @@ const dbService = require('../services/dbService');
 const linkedinEnrichmentService = require('../services/linkedinEnrichmentService');
 const scheduleService = require('../services/scheduleService');
 const cacheService = require('../services/cacheService');
+const phEnrichmentService = require('../services/phEnrichmentService');
 
 /**
  * POST /cron/fetch
  * Trigger RSS feed fetching for all configured categories
- * This endpoint is designed to be called by external cron services
  */
 router.post('/fetch', async (req, res) => {
   const startTime = Date.now();
@@ -19,7 +19,6 @@ router.post('/fetch', async (req, res) => {
   console.log('Timestamp:', new Date().toISOString());
 
   try {
-    // Check if job should run based on schedule
     const scheduleCheck = await scheduleService.shouldJobRun(jobName);
     
     if (!scheduleCheck.shouldRun) {
@@ -35,7 +34,6 @@ router.post('/fetch', async (req, res) => {
 
     console.log(`RSS fetch allowed: ${scheduleCheck.reason}`);
 
-    // Fetch all RSS feeds
     const rssResults = await rssService.fetchAllCategories();
     
     console.log('=== RSS Fetch Completed ===');
@@ -44,7 +42,6 @@ router.post('/fetch', async (req, res) => {
     console.log(`Duplicates: ${rssResults.totalDuplicates}`);
     console.log(`Errors: ${rssResults.errors.length}`);
 
-    // Run LinkedIn enrichment on products that need it
     let enrichmentResults = null;
     try {
       console.log('=== Starting LinkedIn Enrichment ===');
@@ -60,28 +57,35 @@ router.post('/fetch', async (req, res) => {
       };
     }
 
+    let phEnrichmentResults = null;
+    try {
+      console.log('=== Starting Product Hunt Enrichment for New Products ===');
+      phEnrichmentResults = await phEnrichmentService.enrichNewProducts(rssResults.newItems);
+    } catch (phError) {
+      console.error('Product Hunt enrichment failed, but continuing:', phError.message);
+      phEnrichmentResults = { totalEnriched: 0, errors: [{ error: phError.message }] };
+    }
+
     const endTime = Date.now();
     const duration = endTime - startTime;
 
-    // Log combined results
     console.log('=== Combined Cron Job Completed ===');
     console.log(`Total Duration: ${duration}ms`);
     console.log(`RSS - Processed: ${rssResults.totalProcessed}, New: ${rssResults.totalNew}`);
     console.log(`LinkedIn - Processed: ${enrichmentResults.totalProcessed}, Successful: ${enrichmentResults.successfulEnrichments}`);
+    console.log(`PH Enrichment - Enriched: ${phEnrichmentResults.totalEnriched}`);
 
-    // Record the job run
     const jobResults = {
       rss: rssResults,
       enrichment: enrichmentResults,
+      phEnrichment: phEnrichmentResults,
       duration: `${duration}ms`
     };
     
     await scheduleService.recordJobRun(jobName, jobResults);
 
-    // Get updated database stats
     const stats = await dbService.getStats();
 
-    // Return combined success response
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -107,6 +111,13 @@ router.post('/fetch', async (req, res) => {
             errorCount: enrichmentResults.errors.length
           },
           errors: enrichmentResults.errors
+        },
+        phEnrichment: {
+          summary: {
+            totalEnriched: phEnrichmentResults.totalEnriched,
+            errorCount: phEnrichmentResults.errors.length
+          },
+          errors: phEnrichmentResults.errors
         }
       },
       database: stats
@@ -136,7 +147,6 @@ router.post('/fetch', async (req, res) => {
 /**
  * POST /cron/fetch/:category
  * Trigger RSS feed fetching for a specific category
- * Useful for testing or selective updates
  */
 router.post('/fetch/:category', async (req, res) => {
   const { category } = req.params;
@@ -146,7 +156,6 @@ router.post('/fetch/:category', async (req, res) => {
   console.log('Timestamp:', new Date().toISOString());
 
   try {
-    // Validate category
     const rssCategories = require('../config/rssCategories');
     if (!rssCategories.includes(category)) {
       return res.status(400).json({
@@ -158,7 +167,6 @@ router.post('/fetch/:category', async (req, res) => {
       });
     }
 
-    // Fetch specific category
     const result = await rssService.fetchCategory(category);
     
     const endTime = Date.now();
@@ -202,7 +210,6 @@ router.post('/fetch/:category', async (req, res) => {
 /**
  * GET /cron/status
  * Get current status and statistics
- * Useful for monitoring and health checks
  */
 router.get('/status', async (req, res) => {
   try {
@@ -238,7 +245,6 @@ router.get('/status', async (req, res) => {
 /**
  * POST /cron/test/:category
  * Test RSS parsing for a specific category without saving to database
- * Useful for debugging and configuration validation
  */
 router.post('/test/:category', async (req, res) => {
   const { category } = req.params;
@@ -272,7 +278,6 @@ router.post('/test/:category', async (req, res) => {
 /**
  * POST /cron/enrich
  * Trigger LinkedIn enrichment for pending products
- * Useful for manual or standalone enrichment
  */
 router.post('/enrich', async (req, res) => {
   const startTime = Date.now();
@@ -291,7 +296,6 @@ router.post('/enrich', async (req, res) => {
     console.log(`Successful: ${results.successfulEnrichments}`);
     console.log(`Failed: ${results.failedEnrichments}`);
 
-    // Get updated database stats
     const stats = await dbService.getStats();
 
     res.json({
@@ -327,6 +331,39 @@ router.post('/enrich', async (req, res) => {
         message: error.message,
         type: error.name || 'UnknownError'
       }
+    });
+  }
+});
+
+/**
+ * POST /cron/enrich/:productId
+ * Trigger PH enrichment for a specific product
+ */
+router.post('/enrich/:productId', async (req, res) => {
+  const { productId } = req.params;
+  console.log(`=== Manual PH Enrichment for Product ID: ${productId} ===`);
+
+  try {
+    const product = await dbService.getItem(`product:${productId}`);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: { message: `Product not found: ${productId}` }
+      });
+    }
+
+    const enrichedProduct = await phEnrichmentService.enrichProduct(product);
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      product: enrichedProduct
+    });
+  } catch (error) {
+    console.error(`Failed to enrich product ${productId}:`, error.message);
+    res.status(500).json({
+      success: false,
+      timestamp: new Date().toISOString(),
+      error: { message: error.message }
     });
   }
 });

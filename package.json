@@ -30,6 +30,8 @@
     "googleapis": "^150.0.1",
     "helmet": "^7.1.0",
     "nanoid": "^5.0.4",
+    "node-fetch": "^2.7.0",
+    "node-html-parser": "^7.0.1",
     "path": "^0.12.7",
     "rss-parser": "^3.13.0",
     "serve-static": "^1.15.0",
