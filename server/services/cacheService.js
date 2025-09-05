@@ -238,8 +238,13 @@ class CacheService {
       for (const key of allKeys) {
         try {
           const cached = await dbService.getItem(key);
-          if (!cached || this.isExpired(cached.timestamp)) {
-            await this.deleteItem(key);
+          if (!cached || this.isExpired(cached.lastChecked)) {
+            await dbService.deleteItem(key);
+
+            // Remove corresponding entry from in-memory cache as well
+            const cleanKey = key.replace('linkedin_cache:', '');
+            this.inMemoryCache.delete(cleanKey);
+
             results.removed++;
           }
         } catch (error) {
