@@ -173,9 +173,9 @@ app.get('/api/products', async (req, res) => {
       products = await dbService.getAllProducts();
     }
 
-    // Fetch and update upvotes for products missing them
+    // Fetch and update upvotes for products missing them or with zero votes
     for (const product of products) {
-      if ((product.upvotes === undefined || product.upvotes === null) && (product.phLink || product.productHuntLink)) {
+      if ((product.upvotes === undefined || product.upvotes === null || product.upvotes === 0) && (product.phLink || product.productHuntLink)) {
         try {
           const result = await productHuntService.fetchUpvotes(product.id, product.phLink || product.productHuntLink);
           product.upvotes = result.votesCount;
