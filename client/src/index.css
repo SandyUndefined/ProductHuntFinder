@@ -22,7 +22,7 @@ code {
 /* Custom component styles */
 @layer components {
   .btn-primary {
-    @apply bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none;
+    @apply bg-orange-500 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 hover:bg-orange-600 hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {

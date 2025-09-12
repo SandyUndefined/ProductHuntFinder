@@ -8,6 +8,7 @@ const AdminPanel = () => {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [statusFilter, setStatusFilter] = useState('pending');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [processingIds, setProcessingIds] = useState(new Set());
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [swipeDirection, setSwipeDirection] = useState(null);
@@ -37,7 +38,7 @@ const AdminPanel = () => {
 
   useEffect(() => {
     filterMakers();
-  }, [makers, statusFilter]);
+  }, [makers, statusFilter, categoryFilter]);
 
   const fetchAuthInfo = async () => {
     try {
@@ -121,6 +122,10 @@ const AdminPanel = () => {
 
     if (statusFilter !== 'all') {
       filtered = filtered.filter(maker => maker.status === statusFilter);
+    }
+
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(maker => maker.category === categoryFilter);
     }
 
     setFilteredMakers(filtered);
@@ -501,21 +506,40 @@ const AdminPanel = () => {
         {/* Controls */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex flex-col">
-              <label htmlFor="status-filter" className="block text-sm font-semibold text-gray-700 mb-2">
-                Filter by Status:
-              </label>
-              <select
-                id="status-filter"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="form-input max-w-xs"
-              >
-                <option value="pending">Pending ({makers.filter(m => m.status === 'pending').length})</option>
-                <option value="approved">Approved ({makers.filter(m => m.status === 'approved').length})</option>
-                <option value="rejected">Rejected ({makers.filter(m => m.status === 'rejected').length})</option>
-                <option value="all">All ({makers.length})</option>
-              </select>
+            <div className="flex flex-col lg:flex-row gap-4">
+              <div className="flex flex-col">
+                <label htmlFor="status-filter" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Filter by Status:
+                </label>
+                <select
+                  id="status-filter"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="form-input max-w-xs"
+                >
+                  <option value="pending">Pending ({makers.filter(m => m.status === 'pending').length})</option>
+                  <option value="approved">Approved ({makers.filter(m => m.status === 'approved').length})</option>
+                  <option value="rejected">Rejected ({makers.filter(m => m.status === 'rejected').length})</option>
+                  <option value="all">All ({makers.length})</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col">
+                <label htmlFor="category-filter" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Filter by Category:
+                </label>
+                <select
+                  id="category-filter"
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="form-input max-w-xs"
+                >
+                  <option value="all">All Categories ({makers.length})</option>
+                  <option value="artificial-intelligence">AI ({makers.filter(m => m.category === 'artificial-intelligence').length})</option>
+                  <option value="developer-tools">Developer Tools ({makers.filter(m => m.category === 'developer-tools').length})</option>
+                  <option value="saas">SaaS ({makers.filter(m => m.category === 'saas').length})</option>
+                </select>
+              </div>
             </div>
 
             <button
