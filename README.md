@@ -110,6 +110,7 @@ AUTH_TOKEN=your-secure-token-123
 # APIs
 SERPAPI_API_KEY=your_serpapi_key_here
 GOOGLE_SHEETS_ID=your_google_sheets_id
+PRODUCT_HUNT_API_TOKEN=your_product_hunt_api_token
 
 # Google Cloud (base64 encoded service account JSON)
 GOOGLE_CLOUD_CREDENTIALS=your_base64_encoded_service_account_json
@@ -152,6 +153,12 @@ npm start
    - Your app will be available at `https://your-repl-name.your-username.repl.co`
 
 ## 🔧 Configuration Guide
+
+### Setting Up Product Hunt API (Upvotes)
+
+1. Create an app at [Product Hunt Apps](https://www.producthunt.com/apps).
+2. Generate a personal API token.
+3. Add `PRODUCT_HUNT_API_TOKEN` to your environment.
 
 ### Setting Up SerpAPI (LinkedIn Search)
 

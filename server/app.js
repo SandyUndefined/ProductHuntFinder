@@ -4,7 +4,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 require('dotenv').config();
 const fetch = require('node-fetch');
-const cheerio = require('cheerio');
 
 // Import routes
 const cronRoutes = require('./routes/cron');
@@ -115,51 +114,70 @@ app.get('/api/ph-upvotes', async (req, res) => {
     });
   }
 
-  try {
-    // Fetch the Product Hunt page
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://www.producthunt.com/',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1'
+  const token = process.env.PRODUCT_HUNT_API_TOKEN;
+  if (!token) {
+    return res.status(500).json({
+      success: false,
+      error: {
+        message: 'Product Hunt API token not configured',
+        details: 'Set PRODUCT_HUNT_API_TOKEN in the environment'
       }
     });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const query = `
+    query {
+      post(slug: "${slug}") {
+        id
+        name
+        votesCount
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch('https://api.producthunt.com/v2/api/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ query })
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'Invalid Product Hunt API token' }
+      });
     }
 
-    const html = await response.text();
-    const $ = cheerio.load(html);
-
-    // Select the upvote count element (second button, XPath: //*[@id="root-container"]/div[4]/div/main/section/button[2]/div/p)
-    const upvoteElement = $('#root-container div main section button:nth-child(2) div p.text-14');
-    const upvotesText = upvoteElement.text().trim();
-    const upvotes = parseInt(upvotesText, 10);
-
-    if (isNaN(upvotes)) {
-      throw new Error('Unable to parse upvote count');
+    if (response.status === 429) {
+      return res.status(429).json({
+        success: false,
+        error: { message: 'Rate limit exceeded', details: 'Product Hunt API rate limit reached' }
+      });
     }
 
-    // Extract product name for consistency
-    const nameElement = $('h1').first();
-    const name = nameElement.text().trim() || 'Unknown Product';
+    const data = await response.json();
+    if (!response.ok || data.errors) {
+      throw new Error(data.errors ? data.errors[0].message : 'GraphQL request failed');
+    }
 
-    // Update database with upvotes and name
-    await dbService.updateProductFields(productId, { upvotes, name });
-    console.log(`Updated product ${productId} with upvotes: ${upvotes}, name: ${name}`);
+    const { post } = data.data;
+    if (!post) {
+      throw new Error(`No post found for slug: ${slug}`);
+    }
+
+    const { votesCount, id: phId, name } = post;
+    await dbService.updateProductFields(productId, { upvotes: votesCount, phId, name });
+    console.log(`Updated product ${productId} with upvotes: ${votesCount}, phId: ${phId}, name: ${name}`);
 
     return res.json({
       success: true,
       productId,
       url,
-      upvotes
+      upvotes: votesCount
     });
   } catch (error) {
     console.error(`Error fetching upvotes for slug ${slug}:`, error.message);
@@ -168,62 +186,6 @@ app.get('/api/ph-upvotes', async (req, res) => {
       error: { message: 'Failed to fetch upvotes', details: error.message }
     });
   }
-
-  // Note: GraphQL implementation (commented out for future use when API credentials are provided)
-  /*
-  if (process.env.PRODUCT_HUNT_API_TOKEN) {
-    const query = `
-      query {
-        post(slug: "${slug}") {
-          id
-          name
-          votesCount
-        }
-      }
-    `;
-    try {
-      const response = await fetch('https://api.producthunt.com/v2/api/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.PRODUCT_HUNT_API_TOKEN}`
-        },
-        body: JSON.stringify({ query })
-      });
-
-      if (response.status === 429) {
-        return res.status(429).json({
-          success: false,
-          error: { message: 'Rate limit exceeded', details: 'Product Hunt API rate limit reached' }
-        });
-      }
-
-      const data = await response.json();
-      if (!response.ok || data.errors) {
-        throw new Error(data.errors ? data.errors[0].message : 'GraphQL request failed');
-      }
-
-      const { post } = data.data;
-      if (!post) {
-        throw new Error(`No post found for slug: ${slug}`);
-      }
-
-      const { votesCount, id: phId, name } = post;
-      await dbService.updateProductFields(productId, { upvotes: votesCount, phId, name });
-      console.log(`Updated product ${productId} with upvotes: ${votesCount}, phId: ${phId}, name: ${name}`);
-
-      return res.json({
-        success: true,
-        productId,
-        url,
-        upvotes: votesCount
-      });
-    } catch (error) {
-      console.error(`GraphQL error for slug ${slug}:`, error.message);
-      // Fall back to scraping if GraphQL fails
-    }
-  }
-  */
 });
 
 // LinkedIn API proxy
