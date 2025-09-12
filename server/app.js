@@ -173,11 +173,14 @@ app.get('/api/products', async (req, res) => {
       products = await dbService.getAllProducts();
     }
 
-    // Fetch and update upvotes for products missing them
+    // Fetch and update upvotes for products missing them or with zero votes
     for (const product of products) {
-      if ((product.upvotes === undefined || product.upvotes === null) && (product.phLink || product.productHuntLink)) {
+      const phUrl = product.phLink || product.productHuntLink;
+      const needsUpvotes =
+        product.upvotes === undefined || product.upvotes === null || product.upvotes === 0;
+      if (needsUpvotes && phUrl && /producthunt\.com\/(posts|products)\//.test(phUrl)) {
         try {
-          const result = await productHuntService.fetchUpvotes(product.id, product.phLink || product.productHuntLink);
+          const result = await productHuntService.fetchUpvotes(product.id, phUrl);
           product.upvotes = result.votesCount;
         } catch (err) {
           console.error(`Failed to fetch upvotes for product ${product.id}:`, err.message);

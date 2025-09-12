@@ -111,7 +111,7 @@ function ProductList({ products, selectedCategory, selectedStatus, selectedSort,
 }
 
 function ProductCard({ product, formatDate, onEnrich, onStatusChange, onSwipeComplete, isMobile, selectedStatus }) {
-  const upvotes = product.upvotes || product.phUpvotes || 'N/A';
+  const upvotes = product.upvotes ?? product.phUpvotes ?? 'N/A';
   const [isEnriching, setIsEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState(null);
   const [enrichedData, setEnrichedData] = useState(product.linkedInData || null);
