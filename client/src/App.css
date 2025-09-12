@@ -33,7 +33,7 @@
 }
 
 .nav-link {
-  color: #1a202c;
+  color: white;
   text-decoration: none;
   padding: 6.4px 12.8px;
   border-radius: 6px;
@@ -44,12 +44,12 @@
 
 .nav-link:hover {
   opacity: 1;
-  background: rgba(234, 93, 56, 0.1);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .nav-link.active {
   opacity: 1;
-  background: rgba(234, 93, 56, 0.2);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Admin Panel Styles */
@@ -346,8 +346,8 @@
 
 .form-group input:focus {
   outline: none;
-  border-color: #ea5d38;
-  box-shadow: 0 0 0 2px rgba(234, 93, 56, 0.1);
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .login-btn {
@@ -489,6 +489,7 @@
 }
 
 .category-tag {
+
   background: linear-gradient(135deg, #ffffff 0%, #ea5d38 100%);
   color: #1a202c;
   padding: 3.2px 9.6px;
@@ -730,8 +731,8 @@
 .control-group select:focus,
 .control-group button:focus {
   outline: none;
-  border-color: #ea5d38;
-  box-shadow: 0 0 0 2px rgba(234, 93, 56, 0.1);
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .btn-primary {
@@ -748,7 +749,7 @@
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 3px 6px rgba(234, 93, 56, 0.3);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
 }
 
 .btn-primary:disabled {
@@ -769,7 +770,7 @@
   height: 16px;
   border: 2px solid #e2e8f0;
   border-radius: 50%;
-  border-top-color: #ea5d38;
+  border-top-color: #667eea;
   animation: spin 1s ease-in-out infinite;
   margin-right: 6.4px;
 }
@@ -1357,7 +1358,9 @@
 .ph-link,
 .external-link,
 [class*="product-hunt"] {
-  color: #ea5d38;
+.product-link {
+  display: inline-block;
+  color: #667eea;
   text-decoration: none;
   font-size: 11.2px;
   font-weight: 600;
@@ -1522,4 +1525,5 @@
   .nav-link {
     text-align: center;
   }
+}
 }
