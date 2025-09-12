@@ -15,10 +15,12 @@ async function fetchUpvotes(productId, url) {
   let slug;
   try {
     const urlObj = new URL(url);
-    const pathParts = urlObj.pathname.split('/');
-    const productIndex = pathParts.indexOf('products');
-    if (productIndex !== -1 && pathParts[productIndex + 1]) {
-      slug = pathParts[productIndex + 1];
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    const index = pathParts.findIndex(
+      part => part === 'products' || part === 'posts'
+    );
+    if (index !== -1 && pathParts[index + 1]) {
+      slug = pathParts[index + 1];
     } else {
       throw new Error('Invalid Product Hunt URL format');
     }
