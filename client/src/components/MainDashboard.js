@@ -11,9 +11,25 @@ const MainDashboard = () => {
   const [message, setMessage] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
-  const [selectedSort, setSelectedSort] = useState('upvotes'); // Default to upvotes
+  const [selectedSort, setSelectedSort] = useState('upvotes');
+  const [isMobile, setIsMobile] = useState(false);
 
-  const categories = ['artificial-intelligence', 'developer-tools', 'saas'];
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+  const categories = ['all', 'artificial-intelligence', 'developer-tools', 'saas'];
+
+  // Check for mobile view and set default status to pending
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (mobile) {
+        setSelectedStatus('pending');
+      }
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Load initial data
   useEffect(() => {
@@ -30,28 +46,34 @@ const MainDashboard = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch('/api/products');
+
+      const params = new URLSearchParams();
+      if (selectedCategory !== 'all') params.append('category', selectedCategory);
+      if (selectedStatus !== 'all') params.append('status', selectedStatus);
+      if (selectedSort) params.append('sort', selectedSort);
+
+      const response = await fetch(`${API_BASE_URL}/api/products?${params.toString()}`);
       const data = await response.json();
-      
+
       if (data.success) {
-        // Process the data
         const enrichedProducts = data.products.map(product => ({
           ...product,
-          formattedDate: formatDate(new Date(product.publishedAt || product.createdAt))
+          formattedDate: formatDate(new Date(product.publishedAt || product.createdAt)),
+          upvotes: product.upvotes !== undefined ? product.upvotes : product.phUpvotes // Backward compatibility
         }));
-        
-        // Remove duplicates (if any)
+
         const uniqueProducts = enrichedProducts.filter((product, index, self) =>
           index === self.findIndex((p) => p.id === product.id)
         );
-        
+
         setProducts(uniqueProducts);
       } else {
         setError(data.error?.message || 'Failed to load products');
+        toast.error(data.error?.message || 'Failed to load products');
       }
     } catch (err) {
       setError('Failed to load products');
+      toast.error('Failed to load products');
       console.error('Error loading products:', err);
     } finally {
       setLoading(false);
@@ -60,9 +82,9 @@ const MainDashboard = () => {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/stats');
+      const response = await fetch(`${API_BASE_URL}/api/stats`);
       const data = await response.json();
-      
+
       if (data.success) {
         setStats(data.database);
       } else {
@@ -88,46 +110,35 @@ const MainDashboard = () => {
 
     // Apply sorting
     if (selectedSort === 'upvotes') {
-      // Sort by local upvotes (descending), then by date for those with no upvotes
       filtered.sort((a, b) => {
-        const votesA = a.upvotes || 0;
-        const votesB = b.upvotes || 0;
-        
-        // If both have upvotes, sort by upvotes
-        if (votesA !== votesB) {
-          return votesB - votesA;
-        }
-        
-        // If both have same upvotes, sort by date (newest first)
+        const votesA = a.upvotes || a.phUpvotes || 0;
+        const votesB = b.upvotes || b.phUpvotes || 0;
+        if (votesA !== votesB) return votesB - votesA;
         return new Date(b.createdAt || b.publishedAt) - new Date(a.createdAt || a.publishedAt);
       });
     } else if (selectedSort === 'top50') {
-      // Only items with upvotes > 0
-      filtered = filtered.filter(p => (p.upvotes || 0) > 0);
+      filtered = filtered.filter(p => (p.upvotes || p.phUpvotes || 0) > 0);
       filtered.sort((a, b) => {
-        const votesA = a.upvotes || 0;
-        const votesB = b.upvotes || 0;
+        const votesA = a.upvotes || a.phUpvotes || 0;
+        const votesB = b.upvotes || b.phUpvotes || 0;
         if (votesA !== votesB) return votesB - votesA;
         return new Date(b.createdAt || b.publishedAt) - new Date(a.createdAt || a.publishedAt);
       });
       if (filtered.length > 50) filtered = filtered.slice(0, 50);
     } else if (selectedSort === 'linkedin-enriched') {
-      // Filter products with LinkedIn profiles except for the specific URL
       filtered = filtered.filter(product => 
         product.linkedin && 
         typeof product.linkedin === 'string' && 
         product.linkedin.includes('linkedin.com') && 
         product.linkedin !== 'https://www.linkedin.com/company/producthunt'
       );
-      // Sort by newest first
       filtered.sort((a, b) => new Date(b.createdAt || b.publishedAt) - new Date(a.createdAt || a.publishedAt));
     } else if (selectedSort === 'newest') {
       filtered.sort((a, b) => new Date(b.createdAt || b.publishedAt) - new Date(a.createdAt || a.publishedAt));
     } else if (selectedSort === 'oldest') {
-      filtered.sort((a, b) => new Date(a.createdAt || a.publishedAt) - new Date(b.createdAt || b.publishedAt));
+      filtered.sort((a, b) => new Date(a.createdAt || a.publishedAt) - new Date(b.createdAt || a.publishedAt));
     }
 
-    // Compute "Launched this week" for each filtered product
     const now = new Date();
     const enhancedFiltered = filtered.map(product => {
       const launchDate = new Date(product.publishedAt);
@@ -145,57 +156,44 @@ const MainDashboard = () => {
       setError(null);
       setMessage(null);
 
-      const response = await fetch('/api/cron/fetch', {
+      const endpoint = selectedCategory === 'all' 
+        ? `${API_BASE_URL}/api/cron/fetch`
+        : `${API_BASE_URL}/api/cron/fetch/${selectedCategory}`;
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' }
       });
 
       const data = await response.json();
 
       if (data.success) {
         if (data.skipped) {
-          // Handle skipped response (rate limited)
-          setMessage({
-            type: 'success',
-            text: `RSS fetch skipped: ${data.reason}`
-          });
+          setMessage({ type: 'success', text: `RSS fetch skipped: ${data.reason}` });
+          toast.success(`RSS fetch skipped: ${data.reason}`);
         } else if (data.results && data.results.rss && data.results.rss.summary) {
-          // Handle normal response with results
           const summary = data.results.rss.summary;
-          
-          // Create a more detailed message about duplicates
           let messageText = `RSS fetch completed! Processed: ${summary.totalProcessed}, New: ${summary.totalNew}, Duplicates: ${summary.totalDuplicates}`;
-          
-          // Add more context about duplicates if there are any
           if (summary.totalDuplicates > 0) {
             messageText += ` (duplicates are automatically filtered based on normalized Product Hunt links)`;
           }
-          
-          setMessage({
-            type: 'success',
-            text: messageText
-          });
+          setMessage({ type: 'success', text: messageText });
+          toast.success(messageText);
         } else {
-          // Fallback for any other success response
-          setMessage({
-            type: 'success',
-            text: 'RSS fetch completed successfully'
-          });
+          setMessage({ type: 'success', text: 'RSS fetch completed successfully' });
+          toast.success('RSS fetch completed successfully');
         }
-        
-        // Reload products and stats so new cards inherit ranking and upvote defaults
+
         await loadProducts();
         await loadStats();
-        
-        // Auto switch to newest after fetch so latest fetched appear first
         setSelectedSort('newest');
       } else {
         setError(data.error?.message || 'RSS fetch failed');
+        toast.error(data.error?.message || 'RSS fetch failed');
       }
     } catch (err) {
       setError('Failed to trigger RSS fetch');
+      toast.error('Failed to trigger RSS fetch');
       console.error('Error fetching RSS:', err);
     } finally {
       setFetching(false);
@@ -212,10 +210,19 @@ const MainDashboard = () => {
     );
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const handleStatusChange = (id, newStatus) => {
+    setProducts(prevProducts =>
+      prevProducts.map(product =>
+        product.id === id ? { ...product, status: newStatus } : product
+      )
+    );
+    loadStats();
+  };
+
+  const formatDate = (date) => {
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'short',  
+      month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
@@ -229,7 +236,6 @@ const MainDashboard = () => {
 
   return (
     <div className="bg-gray-50 min-h-screen">
-      {/* Header Stats Section */}
       <header className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white py-12 shadow-lg">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-8">
@@ -238,7 +244,6 @@ const MainDashboard = () => {
             </p>
           </div>
           
-          {/* Active Filters Display */}
           <div className="mt-4 flex flex-wrap gap-2">
             {selectedCategory !== 'all' && (
               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
@@ -283,12 +288,9 @@ const MainDashboard = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* Controls - Single Line */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-8">
           <div className="flex flex-wrap items-center gap-3">
-            {/* Category Filter */}
             <div className="flex-grow min-w-[180px] max-w-xs">
               <select
                 id="category-filter"
@@ -297,7 +299,7 @@ const MainDashboard = () => {
                 className="form-input w-full py-2 px-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               >
                 <option value="all">All Categories</option>
-                {categories.map(category => (
+                {categories.slice(1).map(category => (
                   <option key={category} value={category}>
                     {category.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </option>
@@ -305,7 +307,6 @@ const MainDashboard = () => {
               </select>
             </div>
 
-            {/* Status Filter */}
             <div className="flex-grow min-w-[150px] max-w-xs">
               <select
                 id="status-filter"
@@ -320,7 +321,6 @@ const MainDashboard = () => {
               </select>
             </div>
 
-            {/* Sort Filter */}
             <div className="flex-grow min-w-[180px] max-w-xs">
               <select
                 id="sort-filter"
@@ -336,7 +336,6 @@ const MainDashboard = () => {
               </select>
             </div>
 
-            {/* Fetch Button */}
             <button
               className="flex-shrink-0 bg-[#ea5d38] hover:bg-[#dc2626] text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center"
               onClick={handleFetchRSS}
@@ -357,7 +356,6 @@ const MainDashboard = () => {
               )}
             </button>
 
-            {/* Refresh Button */}
             <button
               onClick={loadProducts}
               disabled={loading}
@@ -380,9 +378,8 @@ const MainDashboard = () => {
           </div>
         </div>
 
-        {/* Messages */}
         {error && (
-          <div className="error-message relative mb-6">
+          <div className="error-message relative mb-6 bg-red-100 text-red-800 p-4 rounded-lg">
             <strong>Error:</strong> {error}
             <button onClick={clearMessage} className="absolute top-4 right-4 text-red-500 hover:text-red-700">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -393,7 +390,7 @@ const MainDashboard = () => {
         )}
 
         {message && (
-          <div className="success-message relative mb-6">
+          <div className="success-message relative mb-6 bg-green-100 text-green-800 p-4 rounded-lg">
             <strong>Success:</strong> {message.text}
             <button onClick={clearMessage} className="absolute top-4 right-4 text-green-500 hover:text-green-700">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -403,10 +400,9 @@ const MainDashboard = () => {
           </div>
         )}
 
-        {/* Products */}
         {loading ? (
           <div className="text-center py-12">
-            <div className="loading-spinner mx-auto"></div>
+            <div className="loading-spinner mx-auto w-10 h-10 border-4 border-t-transparent border-gray-600 rounded-full animate-spin"></div>
             <p className="text-gray-600 mt-4">Loading products...</p>
           </div>
         ) : (
@@ -417,6 +413,7 @@ const MainDashboard = () => {
             selectedStatus={selectedStatus}
             selectedSort={selectedSort}
             onEnrich={handleSingleEnrich}
+            onStatusChange={handleStatusChange}
           />
         )}
       </main>
