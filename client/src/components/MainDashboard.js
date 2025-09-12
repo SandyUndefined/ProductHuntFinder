@@ -61,7 +61,7 @@ const MainDashboard = () => {
         const enrichedProducts = data.products.map(product => ({
           ...product,
           formattedDate: formatDate(new Date(product.publishedAt || product.createdAt)),
-          upvotes: product.upvotes !== undefined ? product.upvotes : product.phUpvotes // Backward compatibility
+          upvotes: product.upvotes
         }));
 
         const uniqueProducts = enrichedProducts.filter((product, index, self) =>
@@ -113,16 +113,16 @@ const MainDashboard = () => {
     // Apply sorting
     if (selectedSort === 'upvotes') {
       filtered.sort((a, b) => {
-        const votesA = a.upvotes || a.phUpvotes || 0;
-        const votesB = b.upvotes || b.phUpvotes || 0;
+        const votesA = a.upvotes || 0;
+        const votesB = b.upvotes || 0;
         if (votesA !== votesB) return votesB - votesA;
         return new Date(b.createdAt || b.publishedAt) - new Date(a.createdAt || a.publishedAt);
       });
     } else if (selectedSort === 'top50') {
-      filtered = filtered.filter(p => (p.upvotes || p.phUpvotes || 0) > 0);
+      filtered = filtered.filter(p => (p.upvotes || 0) > 0);
       filtered.sort((a, b) => {
-        const votesA = a.upvotes || a.phUpvotes || 0;
-        const votesB = b.upvotes || b.phUpvotes || 0;
+        const votesA = a.upvotes || 0;
+        const votesB = b.upvotes || 0;
         if (votesA !== votesB) return votesB - votesA;
         return new Date(b.createdAt || b.publishedAt) - new Date(a.createdAt || a.publishedAt);
       });

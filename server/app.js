@@ -13,6 +13,7 @@ const dbService = require('./services/dbService');
 const googleSheetsService = require('./services/googleSheetsService');
 const scheduleService = require('./services/scheduleService');
 const cacheService = require('./services/cacheService');
+const productHuntService = require('./services/productHuntService');
 
 // Import middleware
 const { auth, logAuthAttempt } = require('./middleware/auth');
@@ -85,10 +86,9 @@ app.get('/callback', async (req, res) => {
   }
 });
 
-// Product Hunt upvotes endpoint using web scraping
+// Product Hunt upvotes endpoint
 app.get('/api/ph-upvotes', async (req, res) => {
   const { url, productId } = req.query;
-
   if (!url || !productId) {
     return res.status(400).json({
       success: false,
@@ -96,94 +96,19 @@ app.get('/api/ph-upvotes', async (req, res) => {
     });
   }
 
-  let slug;
   try {
-    const urlObj = new URL(url);
-    const pathParts = urlObj.pathname.split('/');
-    const productIndex = pathParts.indexOf('products');
-    if (productIndex !== -1 && pathParts[productIndex + 1]) {
-      slug = pathParts[productIndex + 1];
-    } else {
-      throw new Error('Invalid Product Hunt URL format');
-    }
-  } catch (error) {
-    console.error(`Invalid URL for productId ${productId}: ${url}`, error.message);
-    return res.status(400).json({
-      success: false,
-      error: { message: 'Invalid Product Hunt URL', details: error.message }
-    });
-  }
-
-  const token = process.env.PRODUCT_HUNT_API_TOKEN;
-  if (!token) {
-    return res.status(500).json({
-      success: false,
-      error: {
-        message: 'Product Hunt API token not configured',
-        details: 'Set PRODUCT_HUNT_API_TOKEN in the environment'
-      }
-    });
-  }
-
-  const query = `
-    query {
-      post(slug: "${slug}") {
-        id
-        name
-        votesCount
-      }
-    }
-  `;
-
-  try {
-    const response = await fetch('https://api.producthunt.com/v2/api/graphql', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ query })
-    });
-
-    if (response.status === 401 || response.status === 403) {
-      return res.status(401).json({
-        success: false,
-        error: { message: 'Invalid Product Hunt API token' }
-      });
-    }
-
-    if (response.status === 429) {
-      return res.status(429).json({
-        success: false,
-        error: { message: 'Rate limit exceeded', details: 'Product Hunt API rate limit reached' }
-      });
-    }
-
-    const data = await response.json();
-    if (!response.ok || data.errors) {
-      throw new Error(data.errors ? data.errors[0].message : 'GraphQL request failed');
-    }
-
-    const { post } = data.data;
-    if (!post) {
-      throw new Error(`No post found for slug: ${slug}`);
-    }
-
-    const { votesCount, id: phId, name } = post;
-    await dbService.updateProductFields(productId, { upvotes: votesCount, phId, name });
-    console.log(`Updated product ${productId} with upvotes: ${votesCount}, phId: ${phId}, name: ${name}`);
-
+    const result = await productHuntService.fetchUpvotes(productId, url);
     return res.json({
       success: true,
       productId,
       url,
-      upvotes: votesCount
+      upvotes: result.votesCount
     });
   } catch (error) {
-    console.error(`Error fetching upvotes for slug ${slug}:`, error.message);
-    return res.status(500).json({
+    const status = error.status || 500;
+    return res.status(status).json({
       success: false,
-      error: { message: 'Failed to fetch upvotes', details: error.message }
+      error: { message: error.message, details: error.message }
     });
   }
 });
@@ -246,6 +171,18 @@ app.get('/api/products', async (req, res) => {
       products = await dbService.getProductsByStatus(status);
     } else {
       products = await dbService.getAllProducts();
+    }
+
+    // Fetch and update upvotes for products missing them
+    for (const product of products) {
+      if ((product.upvotes === undefined || product.upvotes === null) && (product.phLink || product.productHuntLink)) {
+        try {
+          const result = await productHuntService.fetchUpvotes(product.id, product.phLink || product.productHuntLink);
+          product.upvotes = result.votesCount;
+        } catch (err) {
+          console.error(`Failed to fetch upvotes for product ${product.id}:`, err.message);
+        }
+      }
     }
 
     if (sort === 'upvotes') {

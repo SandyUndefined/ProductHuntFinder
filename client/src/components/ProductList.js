@@ -2,17 +2,6 @@ import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { useSwipeable } from 'react-swipeable';
 
-// Utility to debounce API calls
-const debounce = (func, wait) => {
-  let timeout;
-  return (...args) => {
-    clearTimeout(timeout);
-    return new Promise(resolve => {
-      timeout = setTimeout(() => resolve(func(...args)), wait);
-    });
-  };
-};
-
 function ProductList({ products, selectedCategory, selectedStatus, selectedSort, formatDate, onEnrich, onStatusChange }) {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
@@ -122,9 +111,7 @@ function ProductList({ products, selectedCategory, selectedStatus, selectedSort,
 }
 
 function ProductCard({ product, formatDate, onEnrich, onStatusChange, onSwipeComplete, isMobile, selectedStatus }) {
-  const [upvotes, setUpvotes] = useState(product.upvotes || product.phUpvotes || 'N/A');
-  const [isFetchingUpvotes, setIsFetchingUpvotes] = useState(true);
-  const [fetchError, setFetchError] = useState(null);
+  const upvotes = product.upvotes || product.phUpvotes || 'N/A';
   const [isEnriching, setIsEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState(null);
   const [enrichedData, setEnrichedData] = useState(product.linkedInData || null);
@@ -160,67 +147,7 @@ function ProductCard({ product, formatDate, onEnrich, onStatusChange, onSwipeCom
     }
   };
 
-  // Debounced fetch with retry logic for upvotes
-  const debouncedFetchPhUpvotes = debounce(async (retries = 3, delay = 5000) => {
-    try {
-      const phLink = product.phLink || product.productHuntLink;
-      if (!phLink || !product.id) {
-        throw new Error(`Missing required fields: phLink=${phLink}, id=${product.id}`);
-      }
-
-      // Use cached upvotes if available
-      if (product.upvotes !== undefined && product.upvotes !== null) {
-        setUpvotes(product.upvotes);
-        setIsFetchingUpvotes(false);
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/ph-upvotes?url=${encodeURIComponent(phLink)}&productId=${encodeURIComponent(product.id)}`, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (response.status === 429 && retries > 0) {
-        setFetchError('Rate limit exceeded, retrying...');
-        console.log(`Rate limit hit for ${product.name}, retrying after ${delay}ms (${retries} retries left)`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return debouncedFetchPhUpvotes(retries - 1, delay * 2);
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`API error: ${response.status} ${errorData.error?.details || errorData.error || 'Unknown error'}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setUpvotes(data.upvotes);
-        setFetchError(null);
-      } else {
-        throw new Error(data.error?.message || 'Failed to fetch upvotes');
-      }
-    } catch (error) {
-      console.error(`Error fetching PH upvotes for ${product.name}: ${error.message}`, { phLink: product.phLink, id: product.id });
-      setFetchError(
-        error.message.includes('401') ? 'Invalid Product Hunt API token' :
-        error.message.includes('429') ? 'Rate limit exceeded, please try again later' :
-        error.message.includes('Invalid Product Hunt URL') ? 'Invalid Product Hunt URL' :
-        'Failed to fetch upvotes'
-      );
-      setUpvotes(product.upvotes || product.phUpvotes || 'N/A');
-    } finally {
-      setIsFetchingUpvotes(false);
-    }
-  }, 500);
-
-  useEffect(() => {
-    if (product.phLink || product.productHuntLink) {
-      debouncedFetchPhUpvotes();
-    } else {
-      setFetchError('No Product Hunt link available');
-      setIsFetchingUpvotes(false);
-      setUpvotes('N/A');
-    }
-  }, [product.id, product.phLink, product.productHuntLink, product.name, product.upvotes]);
+  // Upvotes are provided by the server
 
   const isValidLinkedInUrl = product.linkedin &&
     typeof product.linkedin === 'string' &&
@@ -584,11 +511,6 @@ function ProductCard({ product, formatDate, onEnrich, onStatusChange, onSwipeCom
           </div>
         </div>
       )}
-      {fetchError && (
-        <div className="px-4 py-1 text-xs text-red-500">
-          {fetchError}
-        </div>
-      )}
       <div className="px-4 py-2 flex justify-between items-center mt-2 sticky bottom-0 bg-gradient-to-t from-white to-transparent">
         <div className="flex items-center gap-4">
           <div className="flex items-center justify-center px-3 py-1 rounded-full border bg-gray-100 text-gray-700 border-gray-200 shadow-sm">
@@ -596,7 +518,7 @@ function ProductCard({ product, formatDate, onEnrich, onStatusChange, onSwipeCom
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"/>
             </svg>
             <span className="text-sm font-medium">
-              {isFetchingUpvotes ? 'Loading...' : `↑ ${upvotes}`}
+              ↑ {upvotes}
             </span>
           </div>
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border shadow-sm ${getStatusBadgeClasses(product.status)}`}>
