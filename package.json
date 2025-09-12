@@ -4,7 +4,7 @@
   "description": "Serverless-friendly web app that processes Product Hunt RSS feeds by category",
   "main": "server/app.js",
   "scripts": {
-    "dev": "nodemon server/app.js",
+    "dev": "NODE_ENV=development nodemon server/app.js",
     "build": "cd client && npm run build && cd ..",
     "start": "NODE_ENV=production node server/app.js",
     "install-client": "cd client && npm install",

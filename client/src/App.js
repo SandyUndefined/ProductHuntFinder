@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import AdminPanel from './components/AdminPanel';
 import MainDashboard from './components/MainDashboard';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 // Navigation component
 const Navigation = () => {
@@ -45,6 +47,7 @@ const Navigation = () => {
 function App() {
   return (
     <Router>
+      <ToastContainer />
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <Navigation />
         

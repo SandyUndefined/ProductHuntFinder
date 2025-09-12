@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ProductList from './ProductList';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const MainDashboard = () => {
   const [products, setProducts] = useState([]);
@@ -14,7 +16,7 @@ const MainDashboard = () => {
   const [selectedSort, setSelectedSort] = useState('upvotes');
   const [isMobile, setIsMobile] = useState(false);
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
   const categories = ['all', 'artificial-intelligence', 'developer-tools', 'saas'];
 
   // Check for mobile view and set default status to pending

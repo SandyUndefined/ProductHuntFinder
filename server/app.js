@@ -19,7 +19,7 @@ const cacheService = require('./services/cacheService');
 const { auth, logAuthAttempt } = require('./middleware/auth');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
 // Security middleware
 app.use(helmet({
@@ -27,11 +27,8 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// CORS configuration
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL || true 
-    : ['http://localhost:5173', 'http://localhost:5000'],
+  origin: true,
   credentials: true
 }));
 
@@ -122,7 +119,16 @@ app.get('/api/ph-upvotes', async (req, res) => {
     // Fetch the Product Hunt page
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.producthunt.com/',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1'
       }
     });
     if (!response.ok) {
@@ -812,7 +818,7 @@ async function validateStartup() {
   
   console.log('\nEnvironment Variables:');
   console.log('• NODE_ENV:', process.env.NODE_ENV || 'development');
-  console.log('• PORT:', process.env.PORT || '5000');
+  console.log('• PORT:', process.env.PORT || '3000');
   console.log('• SERPAPI_API_KEY:', !!process.env.SERPAPI_API_KEY ? '[SET]' : '[NOT SET]');
   console.log('• GOOGLE_SHEETS_ID:', !!process.env.GOOGLE_SHEETS_ID ? '[SET]' : '[NOT SET]');
   console.log('• GOOGLE_SERVICE_ACCOUNT_EMAIL:', !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ? '[SET]' : '[NOT SET]');
