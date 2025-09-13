@@ -8,8 +8,9 @@ class RSSService {
     this.headers = {
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      Accept: 'application/rss+xml, application/xml, text/xml',
+      Accept: 'application/rss+xml, application/xml, text/xml, */*',
       'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
       Referer: 'https://www.producthunt.com/',
     };
 
@@ -60,9 +61,10 @@ class RSSService {
         results.totalDuplicates += categoryResult.duplicates;
         results.newItems.push(...(categoryResult.newItems || []));
       } catch (error) {
-        const errorMessage = error.message.includes('403')
-          ? `Failed to fetch RSS feed for ${category}: Status code 403 (Possible authentication required or rate limit)`
-          : error.message;
+        const errorMessage =
+          error.status === 403 || error.message.includes('403')
+            ? `Failed to fetch RSS feed for ${category}: Status code 403 (Possible authentication required or rate limit)`
+            : error.message;
         console.error(`Error processing category ${category}:`, errorMessage);
         results.errors.push({
           category,
@@ -92,13 +94,16 @@ class RSSService {
           console.error(
             `RSS fetch failed: HTTP ${response.status} ${response.statusText} for ${url}\nHeaders: ${JSON.stringify(this.headers)}`
           );
-          throw new Error(`HTTP error: ${response.status}`);
+          const error = new Error(`HTTP error: ${response.status}`);
+          error.status = response.status;
+          throw error;
         }
         return await response.text();
       } catch (error) {
         console.error(
           `Fetch attempt ${attempt} failed for ${url}: ${error.message}`
         );
+        if (error.status === 403) throw error;
         if (attempt === retries) throw error;
         const delay = 1000 * Math.pow(2, attempt - 1);
         console.log(`Retrying in ${delay}ms...`);
@@ -121,13 +126,14 @@ class RSSService {
       try {
         xml = await this.fetchWithRetry(url);
       } catch (error) {
-        if (error.message.includes('403')) {
+        if (error.status === 403 || error.message.includes('403')) {
           const fallbackUrl = `https://rsshub.app/producthunt/category/${category}`;
           console.warn(
             `Primary feed blocked (${error.message}). Trying fallback: ${fallbackUrl}`
           );
           url = fallbackUrl;
           xml = await this.fetchWithRetry(fallbackUrl);
+          console.log(`Using fallback feed: ${url}`);
         } else {
           throw error;
         }
@@ -178,9 +184,10 @@ class RSSService {
 
       return results;
     } catch (error) {
-      const errorMessage = error.message.includes('403')
-        ? `Failed to fetch RSS feed for ${category}: Status code 403 (Possible authentication required or rate limit)`
-        : error.message;
+      const errorMessage =
+        error.status === 403 || error.message.includes('403')
+          ? `Failed to fetch RSS feed for ${category}: Status code 403 (Possible authentication required or rate limit)`
+          : error.message;
       console.error(
         `Failed to fetch RSS feed for ${category}: ${errorMessage}\nURL: ${url}\nHeaders: ${JSON.stringify(this.headers)}`
       );
@@ -399,9 +406,10 @@ class RSSService {
       console.log('Test result:', JSON.stringify(testResult, null, 2));
       return testResult;
     } catch (error) {
-      const errorMessage = error.message.includes('403')
-        ? `Failed to fetch RSS feed for ${category}: Status code 403 (Possible authentication required or rate limit)`
-        : error.message;
+      const errorMessage =
+        error.status === 403 || error.message.includes('403')
+          ? `Failed to fetch RSS feed for ${category}: Status code 403 (Possible authentication required or rate limit)`
+          : error.message;
       console.error(`Test failed for ${category}:`, errorMessage);
       throw new Error(errorMessage);
     }
