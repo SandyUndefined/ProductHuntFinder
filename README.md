@@ -118,7 +118,10 @@ GOOGLE_CLOUD_CREDENTIALS=your_base64_encoded_service_account_json
 # Server Configuration
 NODE_ENV=development
 PORT=5000
+RATE_LIMIT=100
 ```
+
+`RATE_LIMIT` sets the maximum number of requests per minute (default: 100).
 
 4. **Start the development servers**
 
