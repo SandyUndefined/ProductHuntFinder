@@ -1,9 +1,18 @@
 const Parser = require('rss-parser');
+const fetch = require('node-fetch');
 const rssCategories = require('../config/rssCategories');
 const dbService = require('./dbService');
 
 class RSSService {
   constructor() {
+    this.headers = {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      Accept: 'application/rss+xml, application/xml, text/xml',
+      'Accept-Language': 'en-US,en;q=0.9',
+      Referer: 'https://www.producthunt.com/',
+    };
+
     this.parser = new Parser({
       customFields: {
         item: [
@@ -13,13 +22,7 @@ class RSSService {
           ['author', 'author'],
         ],
       },
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        Accept: 'application/rss+xml, application/xml, text/xml',
-        'Accept-Language': 'en-US,en;q=0.9',
-        Referer: 'https://www.producthunt.com/',
-      },
+      headers: this.headers,
     });
     this.baseUrl = 'https://www.producthunt.com/feed';
   }
@@ -75,6 +78,36 @@ class RSSService {
   }
 
   /**
+   * Fetch RSS feed text with retry and exponential backoff
+   * @param {string} url - Feed URL
+   * @param {number} retries - Number of retries
+   * @returns {Promise<string>} - RSS XML text
+   */
+  async fetchWithRetry(url, retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`Fetching RSS feed ${url} (Attempt ${attempt}/${retries})`);
+        const response = await fetch(url, { headers: this.headers });
+        if (!response.ok) {
+          console.error(
+            `RSS fetch failed: HTTP ${response.status} ${response.statusText} for ${url}\nHeaders: ${JSON.stringify(this.headers)}`
+          );
+          throw new Error(`HTTP error: ${response.status}`);
+        }
+        return await response.text();
+      } catch (error) {
+        console.error(
+          `Fetch attempt ${attempt} failed for ${url}: ${error.message}`
+        );
+        if (attempt === retries) throw error;
+        const delay = 1000 * Math.pow(2, attempt - 1);
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  /**
    * Fetch and process RSS feed for a specific category
    * @param {string} category - Product Hunt category
    * @returns {Promise<Object>} - Processing results for the category
@@ -84,7 +117,8 @@ class RSSService {
     console.log(`Fetching RSS feed: ${url}`);
 
     try {
-      const feed = await this.parser.parseURL(url);
+      const xml = await this.fetchWithRetry(url);
+      const feed = await this.parser.parseString(xml);
       console.log(`Found ${feed.items.length} items in ${category} feed`);
 
       const results = {
@@ -132,7 +166,9 @@ class RSSService {
       const errorMessage = error.message.includes('403')
         ? `Failed to fetch RSS feed for ${category}: Status code 403 (Possible authentication required or rate limit)`
         : error.message;
-      console.error(`Failed to fetch RSS feed for ${category}:`, errorMessage);
+      console.error(
+        `Failed to fetch RSS feed for ${category}: ${errorMessage}\nURL: ${url}\nHeaders: ${JSON.stringify(this.headers)}`
+      );
       throw new Error(errorMessage);
     }
   }
