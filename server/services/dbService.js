@@ -1,5 +1,7 @@
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 // Initialize PostgreSQL connection pool
@@ -44,6 +46,7 @@ const PRODUCT_COLUMNS = [
 class DatabaseService {
   constructor() {
     this.kvInitialized = false;
+    this.productsInitialized = false;
   }
 
   async ensureKvTable() {
@@ -52,6 +55,27 @@ class DatabaseService {
       'CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value JSONB)'
     );
     this.kvInitialized = true;
+  }
+
+  async ensureProductsTable() {
+    if (this.productsInitialized) return;
+    try {
+      const check = await pool.query(
+        "SELECT to_regclass('public.products') AS table"
+      );
+      if (!check.rows[0].table) {
+        const initSql = fs.readFileSync(
+          path.join(__dirname, '..', 'db-init.sql'),
+          'utf-8'
+        );
+        await pool.query(initSql);
+        console.log('Products table initialized');
+      }
+      this.productsInitialized = true;
+    } catch (err) {
+      console.error('Failed to ensure products table:', err.message);
+      throw err;
+    }
   }
 
   /**
@@ -129,37 +153,42 @@ class DatabaseService {
    * @returns {Promise<Object>}
    */
   async saveProduct(product) {
-    const existing = await pool.query('SELECT id FROM products WHERE phLink=$1', [
-      product.phLink,
-    ]);
+    try {
+      const existing = await pool.query('SELECT id FROM products WHERE phLink=$1', [
+        product.phLink,
+      ]);
 
-    if (existing.rows.length) {
-      return this.updateProductFields(existing.rows[0].id, product);
-    }
-
-    const now = new Date().toISOString();
-    const data = {
-      id: product.id || uuidv4(),
-      status: product.status || 'pending',
-      createdAt: now,
-      updatedAt: now,
-      ...product,
-    };
-
-    const cols = [];
-    const vals = [];
-    const placeholders = [];
-    for (const col of PRODUCT_COLUMNS) {
-      if (data[col] !== undefined) {
-        cols.push(col);
-        vals.push(data[col]);
-        placeholders.push(`$${vals.length}`);
+      if (existing.rows.length) {
+        return this.updateProductFields(existing.rows[0].id, product);
       }
-    }
 
-    const query = `INSERT INTO products (${cols.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`;
-    const res = await pool.query(query, vals);
-    return res.rows[0];
+      const now = new Date().toISOString();
+      const data = {
+        id: product.id || uuidv4(),
+        status: product.status || 'pending',
+        createdAt: now,
+        updatedAt: now,
+        ...product,
+      };
+
+      const cols = [];
+      const vals = [];
+      const placeholders = [];
+      for (const col of PRODUCT_COLUMNS) {
+        if (data[col] !== undefined) {
+          cols.push(col);
+          vals.push(data[col]);
+          placeholders.push(`$${vals.length}`);
+        }
+      }
+
+      const query = `INSERT INTO products (${cols.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`;
+      const res = await pool.query(query, vals);
+      return res.rows[0];
+    } catch (err) {
+      console.error('saveProduct error:', err.message);
+      throw err;
+    }
   }
 
   async getAllProducts() {
