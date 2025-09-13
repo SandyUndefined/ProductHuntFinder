@@ -8,8 +8,9 @@ const cacheService = require('../services/cacheService');
 const phEnrichmentService = require('../services/phEnrichmentService');
 
 /**
- * POST /cron/fetch
- * Trigger RSS feed fetching for all configured categories
+ * POST /cron/fetch?force=true
+ * Trigger RSS feed fetching for all configured categories.
+ * Set force=true to bypass the scheduled interval check.
  */
 router.post('/fetch', async (req, res) => {
   const startTime = Date.now();
@@ -19,9 +20,10 @@ router.post('/fetch', async (req, res) => {
   console.log('Timestamp:', new Date().toISOString());
 
   try {
+    const forceRun = req.query.force === 'true' || req.body?.force === true;
     const scheduleCheck = await scheduleService.shouldJobRun(jobName);
 
-    if (!scheduleCheck.shouldRun) {
+    if (!scheduleCheck.shouldRun && !forceRun) {
       console.log(`Skipping RSS fetch: ${scheduleCheck.reason}`);
       return res.json({
         success: true,
@@ -32,7 +34,11 @@ router.post('/fetch', async (req, res) => {
       });
     }
 
-    console.log(`RSS fetch allowed: ${scheduleCheck.reason}`);
+    if (!scheduleCheck.shouldRun && forceRun) {
+      console.log(`Forcing RSS fetch despite schedule: ${scheduleCheck.reason}`);
+    } else {
+      console.log(`RSS fetch allowed: ${scheduleCheck.reason}`);
+    }
 
     const rssResults = await rssService.fetchAllCategories();
 
