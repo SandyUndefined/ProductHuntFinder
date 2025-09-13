@@ -754,7 +754,13 @@ app.listen(PORT, async () => {
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`URL: http://localhost:${PORT}`);
   console.log('=================================');
-  
+
+  try {
+    await dbService.ensureProductsTable();
+  } catch (err) {
+    console.error('Database initialization failed:', err.message);
+  }
+
   await validateStartup();
   
   console.log('Available endpoints:');
