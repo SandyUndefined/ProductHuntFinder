@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const fetch = require('node-fetch');
 
@@ -20,6 +21,7 @@ const { auth, logAuthAttempt } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const RATE_LIMIT = parseInt(process.env.RATE_LIMIT || '100', 10);
 
 // Security middleware
 app.use(helmet({
@@ -48,6 +50,9 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(clientBuildPath));
   console.log(`Serving static files from: ${clientBuildPath}`);
 }
+
+// Rate limiting
+app.use(rateLimit({ windowMs: 60_000, max: RATE_LIMIT }));
 
 // API Routes
 app.use('/api/cron', cronRoutes);
