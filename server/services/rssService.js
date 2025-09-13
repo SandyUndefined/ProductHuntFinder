@@ -113,11 +113,26 @@ class RSSService {
    * @returns {Promise<Object>} - Processing results for the category
    */
   async fetchCategory(category) {
-    const url = `${this.baseUrl}?category=${category}`;
+    let url = `${this.baseUrl}?category=${category}`;
     console.log(`Fetching RSS feed: ${url}`);
 
     try {
-      const xml = await this.fetchWithRetry(url);
+      let xml;
+      try {
+        xml = await this.fetchWithRetry(url);
+      } catch (error) {
+        if (error.message.includes('403')) {
+          const fallbackUrl = `https://rsshub.app/producthunt/category/${category}`;
+          console.warn(
+            `Primary feed blocked (${error.message}). Trying fallback: ${fallbackUrl}`
+          );
+          url = fallbackUrl;
+          xml = await this.fetchWithRetry(fallbackUrl);
+        } else {
+          throw error;
+        }
+      }
+
       const feed = await this.parser.parseString(xml);
       console.log(`Found ${feed.items.length} items in ${category} feed`);
 
