@@ -119,7 +119,11 @@ function ProductCard({ product, formatDate, onEnrich, onStatusChange, onSwipeCom
   const [swipeAction, setSwipeAction] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.MODE === 'development'
+      ? 'http://localhost:5000'
+      : window.location.origin);
 
   const getCategoryDisplayName = (category) => {
     return category
