@@ -99,7 +99,7 @@ npm run dev
 
 ### 3. Access Admin Panel
 
-Visit: `http://localhost:3000/admin`
+Visit: `http://localhost:5000/admin`
 
 **Development Login:**
 - Username: `admin`

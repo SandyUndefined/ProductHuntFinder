@@ -101,7 +101,7 @@ GOOGLE_PROJECT_ID=your-project-id
 
 2. Check if Google Sheets integration is working:
    ```bash
-   curl http://localhost:3000/api/sheets/status
+   curl http://localhost:5000/api/sheets/status
    ```
 
 3. If successful, you should see a response indicating the Google Sheets service is available.
@@ -159,13 +159,13 @@ DEBUG=googleapis:*
 
 1. **Test database sync status tracking:**
    ```bash
-   curl http://localhost:3000/api/stats
+   curl http://localhost:5000/api/stats
    ```
    Look for `syncedToSheets` and `needingSheetsSync` in the response.
 
 2. **Test manual resync:**
    ```bash
-   curl -X POST http://localhost:3000/api/cron/resync-sheets
+   curl -X POST http://localhost:5000/api/cron/resync-sheets
    ```
 
 ## Security Considerations

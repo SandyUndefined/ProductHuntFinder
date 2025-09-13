@@ -344,7 +344,7 @@ class PhEnrichmentService {
       } catch (error) {
         console.error(`Fetch attempt ${i + 1} failed for ${url}: ${error.message}`);
         if (i === retries - 1) throw error;
-        await new Promise(resolve => setTimeout(resolve, 3000 * (i + 1)));
+        await new Promise(resolve => setTimeout(resolve, 5000 * (i + 1)));
       }
     }
   }

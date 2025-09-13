@@ -99,15 +99,15 @@ Instead of individual environment variables, you can also:
 
 ```bash
 # Check if Google Sheets service is working
-curl http://localhost:3000/api/sheets/status
+curl http://localhost:5000/api/sheets/status
 
 # Test approval (replace ID with actual product ID)
-curl -X POST "http://localhost:3000/api/makers/PRODUCT_ID/approve" \
+curl -X POST "http://localhost:5000/api/makers/PRODUCT_ID/approve" \
   -H "Authorization: Basic YWRtaW46YWRtaW4xMjM=" \
   -H "Content-Type: application/json"
 
 # Manually sync approved makers to sheets
-curl -X POST "http://localhost:3000/api/cron/resync-sheets" \
+curl -X POST "http://localhost:5000/api/cron/resync-sheets" \
   -H "Authorization: Basic YWRtaW46YWRtaW4xMjM=" \
   -H "Content-Type: application/json"
 ```

@@ -85,13 +85,13 @@ GOOGLE_PROJECT_ID=your-project-id-12345
 1. **Restart your server** (important!)
 2. **Test status:**
    ```bash
-   curl http://localhost:3000/api/sheets/status
+   curl http://localhost:5000/api/sheets/status
    ```
    Should return: `"available": true`
 
 3. **Sync your approved makers:**
    ```bash
-   curl -X POST http://localhost:3000/api/cron/resync-sheets
+   curl -X POST http://localhost:5000/api/cron/resync-sheets
    ```
 
 4. **Check your Google Sheet** - you should see all 8 approved makers!

@@ -7,7 +7,7 @@
 
 const fetch = require('node-fetch');
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = 'http://localhost:5000';
 const AUTH_HEADER = 'Basic ' + Buffer.from('admin:admin123').toString('base64');
 
 async function makeRequest(url, options = {}) {
@@ -131,7 +131,7 @@ async function main() {
   if (pendingMakers.length === 0) {
     console.log('ℹ️  No pending makers found to test approval with');
     console.log('   You can run the RSS fetch to get new makers:');
-    console.log('   curl -X POST http://localhost:3000/api/cron/fetch');
+    console.log('   curl -X POST http://localhost:5000/api/cron/fetch');
   } else {
     // Test approval with the first pending maker
     const testMaker = pendingMakers[0];
@@ -159,10 +159,10 @@ async function main() {
   console.log('🏁 Test completed!');
   console.log('');
   console.log('💡 Useful commands:');
-  console.log('   • Check status: curl http://localhost:3000/api/status');
-  console.log('   • Get makers: curl -H "Authorization: Basic YWRtaW46YWRtaW4xMjM=" http://localhost:3000/api/makers');
-  console.log('   • Fetch new products: curl -X POST http://localhost:3000/api/cron/fetch');
-  console.log('   • Admin panel: http://localhost:3000 (use admin/admin123)');
+  console.log('   • Check status: curl http://localhost:5000/api/status');
+  console.log('   • Get makers: curl -H "Authorization: Basic YWRtaW46YWRtaW4xMjM=" http://localhost:5000/api/makers');
+  console.log('   • Fetch new products: curl -X POST http://localhost:5000/api/cron/fetch');
+  console.log('   • Admin panel: http://localhost:5000 (use admin/admin123)');
 }
 
 // Handle errors gracefully

@@ -117,7 +117,7 @@ GOOGLE_CLOUD_CREDENTIALS=your_base64_encoded_service_account_json
 
 # Server Configuration
 NODE_ENV=development
-PORT=3000
+PORT=5000
 ```
 
 4. **Start the development servers**
@@ -135,7 +135,7 @@ npm start
 
 5. **Access the application**
 - Frontend: `http://localhost:3001`
-- Backend API: `http://localhost:3000`
+- Backend API: `http://localhost:5000`
 
 ### Replit Deployment
 

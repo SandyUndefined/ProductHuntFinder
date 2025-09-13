@@ -159,7 +159,7 @@ const AdminPanel = () => {
         ));
         
         // Clear message after 3 seconds
-        setTimeout(() => setMessage(null), 3000);
+        setTimeout(() => setMessage(null), 5000);
       } else {
         setError(data.error?.message || 'Failed to approve maker');
       }
@@ -202,7 +202,7 @@ const AdminPanel = () => {
         ));
         
         // Clear message after 3 seconds
-        setTimeout(() => setMessage(null), 3000);
+        setTimeout(() => setMessage(null), 5000);
       } else {
         setError(data.error?.message || 'Failed to reject maker');
       }

@@ -19,7 +19,7 @@ const productHuntService = require('./services/productHuntService');
 const { auth, logAuthAttempt } = require('./middleware/auth');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 // Security middleware
 app.use(helmet({
@@ -720,7 +720,7 @@ async function validateStartup() {
   
   console.log('\nEnvironment Variables:');
   console.log('• NODE_ENV:', process.env.NODE_ENV || 'development');
-  console.log('• PORT:', process.env.PORT || '3000');
+  console.log('• PORT:', process.env.PORT || '5000');
   console.log('• SERPAPI_API_KEY:', !!process.env.SERPAPI_API_KEY ? '[SET]' : '[NOT SET]');
   console.log('• GOOGLE_SHEETS_ID:', !!process.env.GOOGLE_SHEETS_ID ? '[SET]' : '[NOT SET]');
   console.log('• GOOGLE_SERVICE_ACCOUNT_EMAIL:', !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ? '[SET]' : '[NOT SET]');
