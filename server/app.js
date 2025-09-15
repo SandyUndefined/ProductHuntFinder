@@ -23,6 +23,12 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const RATE_LIMIT = parseInt(process.env.RATE_LIMIT || '100', 10);
 
+// Trust the first proxy so that rate limiting and other middleware can
+// accurately obtain the client's IP from the X-Forwarded-For header.
+// This prevents express-rate-limit from throwing an ERR_ERL_UNEXPECTED_X_FORWARDED_FOR error
+// in environments (like Replit or other proxies) that set this header.
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -52,7 +58,14 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Rate limiting
-app.use(rateLimit({ windowMs: 60_000, max: RATE_LIMIT }));
+app.use(
+  rateLimit({
+    windowMs: 60_000,
+    max: RATE_LIMIT,
+    // Disable strict validations related to proxy headers since we explicitly trust the first proxy
+    validate: { xForwardedForHeader: false, trustProxy: false }
+  })
+);
 
 // API Routes
 app.use('/api/cron', cronRoutes);
