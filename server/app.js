@@ -58,7 +58,14 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Rate limiting
-app.use(rateLimit({ windowMs: 60_000, max: RATE_LIMIT }));
+app.use(
+  rateLimit({
+    windowMs: 60_000,
+    max: RATE_LIMIT,
+    // Disable strict validations related to proxy headers since we explicitly trust the first proxy
+    validate: { xForwardedForHeader: false, trustProxy: false }
+  })
+);
 
 // API Routes
 app.use('/api/cron', cronRoutes);
